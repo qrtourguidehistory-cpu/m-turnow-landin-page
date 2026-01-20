@@ -260,20 +260,29 @@ export function useUpdateApprovalRequest() {
         throw requestError;
       }
 
+      // Obtener el negocio actual para obtener el owner_id
+      const { data: currentBusiness } = await supabase
+        .from("businesses")
+        .select("owner_id, business_name")
+        .eq("id", businessId)
+        .single();
+
       // Update the business accordingly
       const businessUpdates = status === "approved" 
         ? { 
             approval_status: "approved", 
             is_public: true, 
             is_active: true,
-            onboarding_completed: true
+            onboarding_completed: true,
+            updated_at: new Date().toISOString() // Forzar actualización de updated_at
           }
         : { 
             approval_status: "rejected",
-            is_public: false
+            is_public: false,
+            updated_at: new Date().toISOString()
           };
 
-      const { data, error: businessError } = await supabase
+      const { data: businessData, error: businessError } = await supabase
         .from("businesses")
         .update(businessUpdates)
         .eq("id", businessId)
@@ -285,8 +294,73 @@ export function useUpdateApprovalRequest() {
         throw businessError;
       }
       
-      console.log("Successfully approved business:", data);
-      return data;
+      console.log("Successfully updated business:", businessData);
+
+      // Si se aprobó, crear notificaciones para todos los admins y el dueño
+      if (status === "approved" && businessData) {
+        // Obtener todos los IDs de admin
+        const { data: adminUsers, error: adminError } = await supabase
+          .from("user_roles")
+          .select("user_id")
+          .eq("role", "admin");
+
+        const notifications = [];
+
+        // Notificaciones para todos los admins
+        if (!adminError && adminUsers && adminUsers.length > 0) {
+          adminUsers.forEach((admin) => {
+            // Solo notificar a otros admins, no al que aprobó
+            if (admin.user_id !== user.id) {
+              notifications.push({
+                user_id: admin.user_id,
+                title: "Establecimiento Aprobado",
+                message: `El establecimiento "${businessData.business_name || 'Sin nombre'}" ha sido aprobado y publicado por ${user.email || 'un administrador'}.`,
+                type: "business_approved",
+                link: `/admin/establishments/${businessId}`,
+                read: false,
+                meta: {
+                  business_id: businessId,
+                  business_name: businessData.business_name,
+                  approved_by: user.id,
+                  approved_by_email: user.email
+                }
+              });
+            }
+          });
+        }
+
+        // Notificación para el dueño del negocio
+        if (currentBusiness?.owner_id) {
+          notifications.push({
+            user_id: currentBusiness.owner_id,
+            title: "¡Tu establecimiento ha sido aprobado!",
+            message: `Tu establecimiento "${businessData.business_name || 'Sin nombre'}" ha sido aprobado y ahora está visible públicamente.`,
+            type: "business_approved",
+            link: `/business/dashboard`,
+            read: false,
+            meta: {
+              business_id: businessId,
+              business_name: businessData.business_name
+            }
+          });
+        }
+
+        // Insertar todas las notificaciones
+        if (notifications.length > 0) {
+          const { error: notificationError } = await supabase
+            .from("notifications")
+            .insert(notifications);
+
+          if (notificationError) {
+            console.error("Error creating notifications:", notificationError);
+            // No lanzar error, solo loguear, porque la aprobación ya fue exitosa
+          } else {
+            console.log(`Created ${notifications.length} notifications for business approval`);
+          }
+        }
+      }
+      
+      return businessData;
     },
     onSuccess: () => {
       // Invalidar todas las queries relacionadas
