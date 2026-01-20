@@ -40,6 +40,11 @@ import { cn } from "../lib/utils";
 import { format } from "date-fns";
 import { es } from "date-fns/locale";
 import { useNavigate } from "react-router-dom";
+import { useState } from "react";
+import { useUpdateBusiness, useUpdateApprovalRequest } from "../hooks/useBusinesses";
+import { EstablishmentDetailSheet } from "../components/establishments/EstablishmentDetailSheet";
+import { X, ChevronDown, ChevronUp } from "lucide-react";
+import { toast } from "sonner";
 
 const COLORS = ["hsl(221, 83%, 53%)", "hsl(142, 71%, 45%)", "hsl(38, 92%, 50%)", "hsl(0, 84%, 60%)", "hsl(262, 83%, 58%)", "hsl(199, 89%, 48%)"];
 
@@ -49,13 +54,76 @@ const Dashboard = () => {
   const { data: chartData } = useDashboardCharts();
   const { data: pendingApprovalRequests } = usePendingApprovalRequests();
   const { data: directPending } = usePendingBusinesses();
+  const updateBusiness = useUpdateBusiness();
+  const updateApprovalRequest = useUpdateApprovalRequest();
+  
+  const [showAllPending, setShowAllPending] = useState(false);
+  const [selectedBusiness, setSelectedBusiness] = useState<any>(null);
+  const [detailsOpen, setDetailsOpen] = useState(false);
   
   // Combine both sources for total pending
   const requestBusinessIds = new Set(pendingApprovalRequests?.map(r => r.business_id) || []);
   const pendingBusinesses = [
-    ...(pendingApprovalRequests?.map(req => req.business) || []).filter(b => b),
-    ...(directPending?.filter(b => !requestBusinessIds.has(b.id)) || [])
+    ...(pendingApprovalRequests?.map(req => ({ ...req.business, requestId: req.id, isFromRequest: true })) || []).filter(b => b),
+    ...(directPending?.filter(b => !requestBusinessIds.has(b.id)).map(b => ({ ...b, isFromRequest: false })) || [])
   ];
+
+  const handleApprove = async (biz: any) => {
+    try {
+      if (biz.isFromRequest && biz.requestId) {
+        await updateApprovalRequest.mutateAsync({
+          requestId: biz.requestId,
+          businessId: biz.id,
+          status: "approved"
+        });
+      } else {
+        await updateBusiness.mutateAsync({
+          id: biz.id,
+          updates: {
+            approval_status: "approved",
+            onboarding_completed: true,
+            is_active: true,
+            is_public: true
+          }
+        });
+      }
+      toast.success(`${biz.business_name || "Negocio"} ha sido aprobado y publicado`);
+    } catch (err: any) {
+      console.error("Error approving:", err);
+      toast.error(err?.message || "Error al aprobar el establecimiento");
+    }
+  };
+
+  const handleReject = async (biz: any) => {
+    try {
+      if (biz.isFromRequest && biz.requestId) {
+        await updateApprovalRequest.mutateAsync({
+          requestId: biz.requestId,
+          businessId: biz.id,
+          status: "rejected",
+          rejectionReason: "Solicitud rechazada por el administrador"
+        });
+      } else {
+        await updateBusiness.mutateAsync({
+          id: biz.id,
+          updates: {
+            approval_status: "rejected",
+            is_active: false,
+            is_public: false
+          }
+        });
+      }
+      toast.success(`${biz.business_name || "Negocio"} ha sido rechazado`);
+    } catch (err: any) {
+      console.error("Error rejecting:", err);
+      toast.error(err?.message || "Error al rechazar el establecimiento");
+    }
+  };
+
+  const handleViewDetails = (biz: any) => {
+    setSelectedBusiness(biz);
+    setDetailsOpen(true);
+  };
 
   // Prepare line chart data - now chartData.appointmentsByDay is already an array
   const lineChartData = chartData?.appointmentsByDay?.map((item: any) => ({
@@ -205,22 +273,37 @@ const Dashboard = () => {
                     Establecimientos Pendientes de Aprobación ({pendingBusinesses.length})
                   </CardTitle>
                 </div>
-                <Button variant="outline" size="sm" onClick={() => navigate("/admin/establishments?status=pending")}>
-                  Ver todos
+                <Button 
+                  variant="outline" 
+                  size="sm" 
+                  onClick={() => setShowAllPending(!showAllPending)}
+                  className="flex items-center gap-2"
+                >
+                  {showAllPending ? (
+                    <>
+                      <ChevronUp className="h-4 w-4" />
+                      Ocultar
+                    </>
+                  ) : (
+                    <>
+                      <ChevronDown className="h-4 w-4" />
+                      Ver todos
+                    </>
+                  )}
                 </Button>
               </CardHeader>
               <CardContent>
                 <div className="space-y-3">
-                  {pendingBusinesses.slice(0, 5).map((biz: any) => (
+                  {(showAllPending ? pendingBusinesses : pendingBusinesses.slice(0, 5)).map((biz: any) => (
                     <div key={biz?.id || biz?.business_id} className="flex items-center justify-between p-3 bg-card border border-border rounded-lg">
-                      <div className="flex items-center gap-3">
-                        <div className="w-10 h-10 rounded-lg bg-muted flex items-center justify-center">
+                      <div className="flex items-center gap-3 flex-1 min-w-0">
+                        <div className="w-10 h-10 rounded-lg bg-muted flex items-center justify-center shrink-0">
                           <Building2 className="h-5 w-5 text-muted-foreground" />
                         </div>
-                        <div>
-                          <p className="font-medium text-foreground">{biz?.business_name || biz?.name || "Sin nombre"}</p>
+                        <div className="min-w-0 flex-1">
+                          <p className="font-medium text-foreground truncate">{biz?.business_name || biz?.name || "Sin nombre"}</p>
                           <div className="flex items-center gap-2 text-xs text-muted-foreground">
-                            <Clock className="h-3 w-3" />
+                            <Clock className="h-3 w-3 shrink-0" />
                             <span>
                               {biz?.created_at || biz?.submitted_at
                                 ? format(new Date(biz.created_at || biz.submitted_at), "dd MMM yyyy", { locale: es })
@@ -229,11 +312,42 @@ const Dashboard = () => {
                             {(biz?.primary_category || biz?.category) && (
                               <>
                                 <span>•</span>
-                                <span>{biz.primary_category || biz.category}</span>
+                                <span className="truncate">{biz.primary_category || biz.category}</span>
                               </>
                             )}
                           </div>
                         </div>
+                      </div>
+                      <div className="flex items-center gap-1.5 shrink-0">
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          className="h-8 px-2 text-muted-foreground hover:text-foreground"
+                          onClick={() => handleViewDetails(biz)}
+                        >
+                          <Eye className="h-4 w-4 mr-1" />
+                          Detalles
+                        </Button>
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          className="h-8 px-2 text-success hover:text-success hover:bg-success/10"
+                          onClick={() => handleApprove(biz)}
+                          disabled={updateBusiness.isPending || updateApprovalRequest.isPending}
+                        >
+                          <Check className="h-4 w-4 mr-1" />
+                          Aprobar
+                        </Button>
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          className="h-8 px-2 text-destructive hover:text-destructive hover:bg-destructive/10"
+                          onClick={() => handleReject(biz)}
+                          disabled={updateBusiness.isPending || updateApprovalRequest.isPending}
+                        >
+                          <X className="h-4 w-4 mr-1" />
+                          Rechazar
+                        </Button>
                       </div>
                     </div>
                   ))}
@@ -334,6 +448,25 @@ const Dashboard = () => {
           </div>
         </div>
       </ScrollArea>
+      
+      {/* Establishment Detail Sheet */}
+      {selectedBusiness && (
+        <EstablishmentDetailSheet
+          business={selectedBusiness}
+          open={detailsOpen}
+          onOpenChange={setDetailsOpen}
+          onApprove={(id, name) => handleApprove(selectedBusiness)}
+          onSuspend={(id, name) => {
+            // Handle suspend if needed
+            toast.info("Usa la sección de Establecimientos para suspender");
+          }}
+          onActivate={(id, name) => {
+            // Handle activate if needed
+            handleApprove(selectedBusiness);
+          }}
+          isActionPending={updateBusiness.isPending || updateApprovalRequest.isPending}
+        />
+      )}
     </AdminLayout>
   );
 };
