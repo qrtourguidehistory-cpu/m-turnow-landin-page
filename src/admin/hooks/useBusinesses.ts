@@ -135,8 +135,7 @@ export function usePendingBusinesses() {
         .from("businesses")
         .select("*")
         .eq("approval_status", "pending")
-        .order("created_at", { ascending: false })
-        .limit(10);
+        .order("created_at", { ascending: false });
 
       if (error) throw error;
       return data || [];
@@ -156,8 +155,7 @@ export function usePendingApprovalRequests() {
           business:businesses(*)
         `)
         .eq("status", "pending")
-        .order("created_at", { ascending: false })
-        .limit(10);
+        .order("created_at", { ascending: false });
 
       if (error) throw error;
       return data || [];
