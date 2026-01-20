@@ -238,17 +238,27 @@ export function useUpdateApprovalRequest() {
       status: "approved" | "rejected"; 
       rejectionReason?: string;
     }) => {
+      // Obtener el usuario actual para establecer reviewed_by
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) {
+        throw new Error("Debes iniciar sesión para realizar esta acción");
+      }
+
       // Update the approval request
       const { error: requestError } = await supabase
         .from("business_approval_requests")
         .update({ 
           status,
           rejection_reason: rejectionReason || null,
-          reviewed_at: new Date().toISOString()
+          reviewed_at: new Date().toISOString(),
+          reviewed_by: user.id
         })
         .eq("id", requestId);
 
-      if (requestError) throw requestError;
+      if (requestError) {
+        console.error("Error updating approval request:", requestError);
+        throw requestError;
+      }
 
       // Update the business accordingly
       const businessUpdates = status === "approved" 
@@ -270,10 +280,16 @@ export function useUpdateApprovalRequest() {
         .select()
         .single();
 
-      if (businessError) throw businessError;
+      if (businessError) {
+        console.error("Error updating business:", businessError);
+        throw businessError;
+      }
+      
+      console.log("Successfully approved business:", data);
       return data;
     },
     onSuccess: () => {
+      // Invalidar todas las queries relacionadas
       queryClient.invalidateQueries({ queryKey: ["businesses"] });
       queryClient.invalidateQueries({ queryKey: ["pending-businesses"] });
       queryClient.invalidateQueries({ queryKey: ["pending-approval-requests"] });

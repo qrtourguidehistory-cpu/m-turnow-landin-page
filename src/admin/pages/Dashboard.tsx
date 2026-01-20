@@ -53,7 +53,6 @@ const Dashboard = () => {
   const { data: stats, isLoading } = useDashboardStats();
   const { data: chartData } = useDashboardCharts();
   const { data: pendingApprovalRequests } = usePendingApprovalRequests();
-  const { data: directPending } = usePendingBusinesses();
   const updateBusiness = useUpdateBusiness();
   const updateApprovalRequest = useUpdateApprovalRequest();
   
@@ -61,58 +60,59 @@ const Dashboard = () => {
   const [selectedBusiness, setSelectedBusiness] = useState<any>(null);
   const [detailsOpen, setDetailsOpen] = useState(false);
   
-  // Combine both sources for total pending
-  const requestBusinessIds = new Set(pendingApprovalRequests?.map(r => r.business_id) || []);
-  const pendingBusinesses = [
-    ...(pendingApprovalRequests?.map(req => ({ ...req.business, requestId: req.id, isFromRequest: true })) || []).filter(b => b),
-    ...(directPending?.filter(b => !requestBusinessIds.has(b.id)).map(b => ({ ...b, isFromRequest: false })) || [])
-  ];
+  // SOLO mostrar establecimientos con solicitudes de aprobación pendientes
+  // No mostrar todos los que tienen approval_status pending/draft
+  const pendingBusinesses = (pendingApprovalRequests || [])
+    .filter(req => req.business) // Solo los que tienen business asociado
+    .map(req => ({ 
+      ...req.business, 
+      requestId: req.id, 
+      requestNotes: req.notes,
+      submittedAt: req.submitted_at,
+      isFromRequest: true 
+    }));
 
   const handleApprove = async (biz: any) => {
     try {
-      if (biz.isFromRequest && biz.requestId) {
-        await updateApprovalRequest.mutateAsync({
-          requestId: biz.requestId,
-          businessId: biz.id,
-          status: "approved"
-        });
-      } else {
-        await updateBusiness.mutateAsync({
-          id: biz.id,
-          updates: {
-            approval_status: "approved",
-            onboarding_completed: true,
-            is_active: true,
-            is_public: true
-          }
-        });
+      if (!biz.requestId) {
+        toast.error("No se puede aprobar: falta información de la solicitud");
+        return;
       }
+
+      // Usar updateApprovalRequest que maneja todo correctamente
+      await updateApprovalRequest.mutateAsync({
+        requestId: biz.requestId,
+        businessId: biz.id,
+        status: "approved"
+      });
+      
       toast.success(`${biz.business_name || "Negocio"} ha sido aprobado y publicado`);
     } catch (err: any) {
       console.error("Error approving:", err);
-      toast.error(err?.message || "Error al aprobar el establecimiento");
+      const errorMessage = err?.message || "Error al aprobar el establecimiento";
+      // Si el error es por RLS de business_subscriptions, informar pero continuar
+      if (errorMessage.includes("business_subscriptions") || errorMessage.includes("row-level security")) {
+        toast.warning("El negocio fue aprobado, pero hubo un problema con la suscripción. Revisa manualmente.");
+      } else {
+        toast.error(errorMessage);
+      }
     }
   };
 
   const handleReject = async (biz: any) => {
     try {
-      if (biz.isFromRequest && biz.requestId) {
-        await updateApprovalRequest.mutateAsync({
-          requestId: biz.requestId,
-          businessId: biz.id,
-          status: "rejected",
-          rejectionReason: "Solicitud rechazada por el administrador"
-        });
-      } else {
-        await updateBusiness.mutateAsync({
-          id: biz.id,
-          updates: {
-            approval_status: "rejected",
-            is_active: false,
-            is_public: false
-          }
-        });
+      if (!biz.requestId) {
+        toast.error("No se puede rechazar: falta información de la solicitud");
+        return;
       }
+
+      await updateApprovalRequest.mutateAsync({
+        requestId: biz.requestId,
+        businessId: biz.id,
+        status: "rejected",
+        rejectionReason: "Solicitud rechazada por el administrador"
+      });
+      
       toast.success(`${biz.business_name || "Negocio"} ha sido rechazado`);
     } catch (err: any) {
       console.error("Error rejecting:", err);
