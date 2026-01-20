@@ -96,6 +96,16 @@ export function PendingApprovals() {
   const directPending = pendingBusinesses?.filter(b => !requestBusinessIds.has(b.id)) || [];
   
   const totalPending = (approvalRequests?.length || 0) + directPending.length;
+  
+  // Debug logging
+  console.log("PendingApprovals Debug:", {
+    approvalRequestsCount: approvalRequests?.length || 0,
+    pendingBusinessesCount: pendingBusinesses?.length || 0,
+    directPendingCount: directPending.length,
+    totalPending,
+    approvalRequests: approvalRequests,
+    pendingBusinesses: pendingBusinesses,
+  });
 
   return (
     <div className="card-elevated">

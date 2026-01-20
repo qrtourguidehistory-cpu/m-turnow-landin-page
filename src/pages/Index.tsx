@@ -6,10 +6,11 @@ import CTA from '@/components/CTA';
 import Footer from '@/components/Footer';
 import { useAutoScroll } from '@/hooks/useAutoScroll';
 
-const SECTION_IDS = ['hero', 'features', 'apps', 'cta'];
+// Todas las secciones en orden: hero, luego las 4 subsecciones de features, luego apps, luego cta
+const SECTION_IDS = ['hero', 'feature-reserve', 'feature-explore', 'feature-dashboard', 'feature-analytics', 'apps', 'cta'];
 
 const Index = () => {
-  useAutoScroll(SECTION_IDS, 4000);
+  useAutoScroll(SECTION_IDS, 5000);
 
   return (
     <div className="min-h-screen bg-background">

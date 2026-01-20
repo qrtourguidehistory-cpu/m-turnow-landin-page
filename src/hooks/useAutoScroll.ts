@@ -18,16 +18,49 @@ export const useAutoScroll = (sectionIds: string[], intervalMs: number = 4000) =
   }, []);
 
   useEffect(() => {
-    const interval = setInterval(() => {
-      if (isPaused.current) return;
+    let scrollTimeout: NodeJS.Timeout | null = null;
+    let intervalTimeout: NodeJS.Timeout | null = null;
+    let interval: NodeJS.Timeout | null = null;
+    let isScrolling = false;
+    let lastScrollTime = 0;
+
+    const scrollToNext = () => {
+      if (isPaused.current || isScrolling) return;
       
-      currentIndex.current = (currentIndex.current + 1) % sectionIds.length;
-      const element = document.getElementById(sectionIds[currentIndex.current]);
+      const now = Date.now();
+      // Asegurar que pasó el tiempo suficiente desde el último scroll
+      if (now - lastScrollTime < intervalMs) return;
       
-      if (element) {
-        element.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      // Buscar el siguiente índice válido
+      let attempts = 0;
+      let nextIndex = currentIndex.current;
+      
+      while (attempts < sectionIds.length) {
+        nextIndex = (nextIndex + 1) % sectionIds.length;
+        const element = document.getElementById(sectionIds[nextIndex]);
+        
+        if (element) {
+          currentIndex.current = nextIndex;
+          isScrolling = true;
+          lastScrollTime = now;
+          
+          element.scrollIntoView({ behavior: 'smooth', block: 'start' });
+          
+          // Esperar a que termine el scroll suave (típicamente toma ~500-800ms)
+          scrollTimeout = setTimeout(() => {
+            isScrolling = false;
+          }, 1200); // Dar tiempo suficiente para que termine el scroll suave
+          
+          break;
+        }
+        attempts++;
       }
-    }, intervalMs);
+    };
+
+    // Esperar un poco antes de empezar el auto-scroll para que la página cargue
+    intervalTimeout = setTimeout(() => {
+      interval = setInterval(scrollToNext, intervalMs);
+    }, 2000);
 
     // Pause on user interaction
     const handleWheel = () => pauseScroll();
@@ -43,7 +76,15 @@ export const useAutoScroll = (sectionIds: string[], intervalMs: number = 4000) =
     window.addEventListener('keydown', handleKeyDown);
 
     return () => {
-      clearInterval(interval);
+      if (interval) {
+        clearInterval(interval);
+      }
+      if (intervalTimeout) {
+        clearTimeout(intervalTimeout);
+      }
+      if (scrollTimeout) {
+        clearTimeout(scrollTimeout);
+      }
       if (pauseTimeoutRef.current) {
         clearTimeout(pauseTimeoutRef.current);
       }

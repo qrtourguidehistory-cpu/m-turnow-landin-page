@@ -126,19 +126,44 @@ export function useUpdateBusiness() {
   });
 }
 
-// Fetch businesses with approval_status = 'pending' (solicitudes enviadas desde Partner)
+// Fetch businesses with approval_status = 'pending' or 'draft' (solicitudes enviadas desde Partner)
+// También incluye negocios que no están aprobados ni son públicos
 export function usePendingBusinesses() {
   return useQuery({
     queryKey: ["pending-businesses"],
     queryFn: async (): Promise<Business[]> => {
+      // Obtener todos los negocios y filtrar en el cliente
+      // Esto es más confiable que usar .or() con múltiples condiciones
       const { data, error } = await supabase
         .from("businesses")
         .select("*")
-        .eq("approval_status", "pending")
         .order("created_at", { ascending: false });
 
-      if (error) throw error;
-      return data || [];
+      if (error) {
+        console.error("Error fetching pending businesses:", error);
+        throw error;
+      }
+      
+      // Filtrar negocios que necesitan aprobación:
+      // 1. approval_status = "pending"
+      // 2. approval_status = "draft" 
+      // 3. approval_status != "approved" y is_public = false
+      // 4. approval_status es null y is_public = false
+      const filtered = (data || []).filter(biz => {
+        const status = biz.approval_status;
+        const isPublic = biz.is_public;
+        
+        return (
+          status === "pending" ||
+          status === "draft" ||
+          (status !== "approved" && !isPublic) ||
+          (status === null && !isPublic)
+        );
+      });
+      
+      console.log("Pending businesses found:", filtered.length, "out of", data?.length || 0, "total businesses");
+      console.log("Pending businesses:", filtered);
+      return filtered;
     },
   });
 }
@@ -148,17 +173,52 @@ export function usePendingApprovalRequests() {
   return useQuery({
     queryKey: ["pending-approval-requests"],
     queryFn: async (): Promise<ApprovalRequest[]> => {
-      const { data, error } = await supabase
+      // Primero obtener las solicitudes
+      const { data: requests, error: requestsError } = await supabase
         .from("business_approval_requests")
-        .select(`
-          *,
-          business:businesses(*)
-        `)
+        .select("*")
         .eq("status", "pending")
         .order("created_at", { ascending: false });
 
-      if (error) throw error;
-      return data || [];
+      if (requestsError) {
+        console.error("Error fetching approval requests:", requestsError);
+        throw requestsError;
+      }
+
+      if (!requests || requests.length === 0) {
+        console.log("No pending approval requests found");
+        return [];
+      }
+
+      // Obtener los IDs de los negocios
+      const businessIds = requests.map(r => r.business_id).filter(Boolean);
+      
+      if (businessIds.length === 0) {
+        return [];
+      }
+
+      // Obtener los negocios relacionados
+      const { data: businesses, error: businessesError } = await supabase
+        .from("businesses")
+        .select("*")
+        .in("id", businessIds);
+
+      if (businessesError) {
+        console.error("Error fetching businesses for approval requests:", businessesError);
+        // Continuar sin los datos de negocios
+      }
+
+      // Crear un mapa de negocios por ID
+      const businessMap = new Map((businesses || []).map((b: Business) => [b.id, b]));
+
+      // Combinar solicitudes con sus negocios
+      const mappedData = requests.map((request: any) => ({
+        ...request,
+        business: businessMap.get(request.business_id) || null,
+      }));
+      
+      console.log("Pending approval requests found:", mappedData?.length || 0, mappedData);
+      return mappedData;
     },
   });
 }

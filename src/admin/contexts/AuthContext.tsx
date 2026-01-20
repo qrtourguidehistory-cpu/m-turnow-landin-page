@@ -1,6 +1,7 @@
-import { createContext, useContext, useEffect, useState, ReactNode } from "react";
+import { createContext, useContext, useEffect, useState, ReactNode, useCallback } from "react";
 import { User, Session } from "@supabase/supabase-js";
 import { supabase } from "../integrations/supabase/client";
+import { useSessionTimeout } from "../hooks/useSessionTimeout";
 
 interface AuthContextType {
   user: User | null;
@@ -63,7 +64,42 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     );
 
     // THEN check for existing session
-    supabase.auth.getSession().then(({ data: { session } }) => {
+    supabase.auth.getSession().then(async ({ data: { session } }) => {
+      // Verificar si estamos en una ruta de admin y si la sesión debe cerrarse
+      const isAdminRoute = window.location.pathname.startsWith('/admin') && 
+                          !window.location.pathname.includes('/admin/auth');
+      
+      if (isAdminRoute && session) {
+        const lastActivity = localStorage.getItem('admin_last_activity');
+        const sessionActive = localStorage.getItem('admin_session_active');
+        
+        if (lastActivity && sessionActive === 'true') {
+          const timeSinceLastActivity = Date.now() - parseInt(lastActivity, 10);
+          
+          // Si pasaron más de 10 minutos, cerrar sesión
+          if (timeSinceLastActivity >= 10 * 60 * 1000) {
+            await supabase.auth.signOut();
+            localStorage.removeItem('admin_session_active');
+            localStorage.removeItem('admin_last_activity');
+            setSession(null);
+            setUser(null);
+            setIsAdmin(false);
+            setIsLoading(false);
+            return;
+          }
+        } else if (!lastActivity || sessionActive !== 'true') {
+          // Si no hay registro de actividad, cerrar sesión por seguridad
+          await supabase.auth.signOut();
+          localStorage.removeItem('admin_session_active');
+          localStorage.removeItem('admin_last_activity');
+          setSession(null);
+          setUser(null);
+          setIsAdmin(false);
+          setIsLoading(false);
+          return;
+        }
+      }
+      
       setSession(session);
       setUser(session?.user ?? null);
       
@@ -91,18 +127,28 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         return { error: new Error(error.message) };
       }
       
+      // Marcar actividad al iniciar sesión
+      const now = Date.now();
+      localStorage.setItem('admin_last_activity', now.toString());
+      localStorage.setItem('admin_session_active', 'true');
+      
       return { error: null };
     } catch (err) {
       return { error: err as Error };
     }
   };
 
-  const signOut = async () => {
+  const signOut = useCallback(async () => {
     await supabase.auth.signOut();
+    localStorage.removeItem('admin_session_active');
+    localStorage.removeItem('admin_last_activity');
     setUser(null);
     setSession(null);
     setIsAdmin(false);
-  };
+  }, []);
+
+  // Usar el hook de timeout de sesión (solo se activa en rutas de admin)
+  useSessionTimeout(signOut);
 
   return (
     <AuthContext.Provider value={{ user, session, isAdmin, isLoading, signIn, signOut }}>

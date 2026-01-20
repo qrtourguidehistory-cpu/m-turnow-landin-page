@@ -64,6 +64,7 @@ const FeatureSection = ({ feature, index }: { feature: Feature; index: number })
 
   return (
     <div 
+      id={`feature-${feature.id}`}
       ref={ref}
       className={`py-20 md:py-32 ${isCarbon ? 'bg-carbon' : 'bg-background'}`}
     >
