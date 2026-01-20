@@ -16,6 +16,7 @@ import Moderation from "../pages/Moderation";
 import Notifications from "../pages/Notifications";
 import Metrics from "../pages/Metrics";
 import Settings from "../pages/Settings";
+import Subscriptions from "../pages/Subscriptions";
 import NotFound from "../pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -37,6 +38,7 @@ const AdminLayout = () => (
           <Route path="moderation" element={<ProtectedRoute><Moderation /></ProtectedRoute>} />
           <Route path="notifications" element={<ProtectedRoute><Notifications /></ProtectedRoute>} />
           <Route path="metrics" element={<ProtectedRoute><Metrics /></ProtectedRoute>} />
+          <Route path="subscriptions" element={<ProtectedRoute><Subscriptions /></ProtectedRoute>} />
           <Route path="settings" element={<ProtectedRoute><Settings /></ProtectedRoute>} />
           <Route path="*" element={<NotFound />} />
         </Routes>

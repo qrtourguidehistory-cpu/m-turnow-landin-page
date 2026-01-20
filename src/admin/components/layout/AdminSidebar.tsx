@@ -76,7 +76,7 @@ export function AdminSidebar() {
         collapsed ? "w-[60px]" : "w-[240px]"
       )}
     >
-      {/* Header */}
+      {/* Header - removed duplicate name, header moved to AdminHeader component */}
       <div className="flex items-center h-14 px-3 border-b border-sidebar-border">
         <Button
           variant="ghost"
@@ -88,8 +88,7 @@ export function AdminSidebar() {
         </Button>
         {!collapsed && (
           <div className="ml-2">
-            <span className="font-semibold text-sm text-foreground">Mí Turnow</span>
-            <span className="text-xs text-muted-foreground ml-1">Admin</span>
+            <span className="font-semibold text-sm text-foreground">Menu</span>
           </div>
         )}
       </div>

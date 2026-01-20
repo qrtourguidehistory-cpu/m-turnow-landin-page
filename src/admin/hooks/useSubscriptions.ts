@@ -36,39 +36,69 @@ export function useSubscriptions(filters: SubscriptionFilters = {}) {
   return useQuery({
     queryKey: ["subscriptions", filters],
     queryFn: async (): Promise<BusinessSubscription[]> => {
-      let query = supabase
+      let subscriptionsQuery = supabase
         .from("business_subscriptions")
-        .select(`
-          *,
-          business:businesses!business_subscriptions_business_id_fkey (
-            business_name
-          ),
-          owner:profiles!business_subscriptions_owner_id_fkey (
-            email
-          )
-        `)
+        .select("*")
         .order("created_at", { ascending: false });
 
       if (filters.status && filters.status !== "all") {
-        query = query.eq("status", filters.status);
+        subscriptionsQuery = subscriptionsQuery.eq("status", filters.status);
       }
 
-      if (filters.search) {
-        query = query.or(`business.business_name.ilike.%${filters.search}%,owner.email.ilike.%${filters.search}%`);
+      const { data: subscriptionsData, error: subscriptionsError } = await subscriptionsQuery;
+
+      if (subscriptionsError) {
+        console.error("Error fetching subscriptions:", subscriptionsError);
+        throw subscriptionsError;
       }
 
-      const { data, error } = await query;
-
-      if (error) {
-        console.error("Error fetching subscriptions:", error);
-        throw error;
+      if (!subscriptionsData || subscriptionsData.length === 0) {
+        return [];
       }
 
-      return (data || []).map((item: any) => ({
-        ...item,
-        business_name: item.business?.business_name || null,
-        owner_email: item.owner?.email || null,
+      // Get business IDs and owner IDs
+      const businessIds = subscriptionsData.map(s => s.business_id).filter(Boolean);
+      const ownerIds = subscriptionsData.map(s => s.owner_id).filter(Boolean);
+
+      // Fetch businesses
+      const { data: businessesData } = await supabase
+        .from("businesses")
+        .select("id, business_name")
+        .in("id", businessIds);
+
+      // Fetch owner profiles
+      let profilesData = null;
+      try {
+        const { data } = await supabase
+          .from("profiles")
+          .select("id, email")
+          .in("id", ownerIds);
+        profilesData = data;
+      } catch (err) {
+        console.warn("Could not fetch profiles, using auth.users instead");
+      }
+
+      // Create lookup maps
+      const businessMap = new Map((businessesData || []).map(b => [b.id, b.business_name]));
+      const profileMap = new Map((profilesData || []).map(p => [p.id, p.email]));
+
+      // Combine data
+      let combinedData = subscriptionsData.map((sub: any) => ({
+        ...sub,
+        business_name: businessMap.get(sub.business_id) || null,
+        owner_email: profileMap.get(sub.owner_id) || null,
       }));
+
+      // Apply search filter if provided
+      if (filters.search) {
+        const searchLower = filters.search.toLowerCase();
+        combinedData = combinedData.filter(sub => 
+          (sub.business_name || "").toLowerCase().includes(searchLower) ||
+          (sub.owner_email || "").toLowerCase().includes(searchLower)
+        );
+      }
+
+      return combinedData;
     },
   });
 }

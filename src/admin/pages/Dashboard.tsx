@@ -1,11 +1,11 @@
 import { AdminLayout } from "../components/layout/AdminLayout";
 import { MetricCard } from "../components/dashboard/MetricCard";
-import { RecentAppointments } from "../components/dashboard/RecentAppointments";
+import { NewClients } from "../components/dashboard/NewClients";
 import { PendingApprovals } from "../components/dashboard/PendingApprovals";
 import { SystemStatus } from "../components/dashboard/SystemStatus";
 import { useDashboardStats } from "../hooks/useDashboardStats";
 import { useDashboardCharts } from "../hooks/useDashboardCharts";
-import { useBusinesses } from "../hooks/useBusinesses";
+import { useBusinesses, usePendingBusinesses, usePendingApprovalRequests } from "../hooks/useBusinesses";
 import { Card, CardContent, CardHeader, CardTitle } from "../components/ui/card";
 import { Button } from "../components/ui/button";
 import { Badge } from "../components/ui/badge";
@@ -39,13 +39,23 @@ import {
 import { cn } from "../lib/utils";
 import { format } from "date-fns";
 import { es } from "date-fns/locale";
+import { useNavigate } from "react-router-dom";
 
 const COLORS = ["hsl(221, 83%, 53%)", "hsl(142, 71%, 45%)", "hsl(38, 92%, 50%)", "hsl(0, 84%, 60%)", "hsl(262, 83%, 58%)", "hsl(199, 89%, 48%)"];
 
 const Dashboard = () => {
+  const navigate = useNavigate();
   const { data: stats, isLoading } = useDashboardStats();
   const { data: chartData } = useDashboardCharts();
-  const { data: pendingBusinesses } = useBusinesses({ status: "pending" });
+  const { data: pendingApprovalRequests } = usePendingApprovalRequests();
+  const { data: directPending } = usePendingBusinesses();
+  
+  // Combine both sources for total pending
+  const requestBusinessIds = new Set(pendingApprovalRequests?.map(r => r.business_id) || []);
+  const pendingBusinesses = [
+    ...(pendingApprovalRequests?.map(req => req.business) || []).filter(b => b),
+    ...(directPending?.filter(b => !requestBusinessIds.has(b.id)) || [])
+  ];
 
   // Prepare line chart data - now chartData.appointmentsByDay is already an array
   const lineChartData = chartData?.appointmentsByDay?.map((item: any) => ({
@@ -195,42 +205,35 @@ const Dashboard = () => {
                     Establecimientos Pendientes de Aprobación ({pendingBusinesses.length})
                   </CardTitle>
                 </div>
-                <Button variant="outline" size="sm">Ver todos</Button>
+                <Button variant="outline" size="sm" onClick={() => navigate("/admin/establishments?status=pending")}>
+                  Ver todos
+                </Button>
               </CardHeader>
               <CardContent>
                 <div className="space-y-3">
-                  {pendingBusinesses.slice(0, 5).map((biz) => (
-                    <div key={biz.id} className="flex items-center justify-between p-3 bg-card border border-border rounded-lg">
+                  {pendingBusinesses.slice(0, 5).map((biz: any) => (
+                    <div key={biz?.id || biz?.business_id} className="flex items-center justify-between p-3 bg-card border border-border rounded-lg">
                       <div className="flex items-center gap-3">
                         <div className="w-10 h-10 rounded-lg bg-muted flex items-center justify-center">
                           <Building2 className="h-5 w-5 text-muted-foreground" />
                         </div>
                         <div>
-                          <p className="font-medium text-foreground">{biz.business_name || "Sin nombre"}</p>
+                          <p className="font-medium text-foreground">{biz?.business_name || biz?.name || "Sin nombre"}</p>
                           <div className="flex items-center gap-2 text-xs text-muted-foreground">
                             <Clock className="h-3 w-3" />
                             <span>
-                              {biz.created_at
-                                ? format(new Date(biz.created_at), "dd MMM yyyy", { locale: es })
+                              {biz?.created_at || biz?.submitted_at
+                                ? format(new Date(biz.created_at || biz.submitted_at), "dd MMM yyyy", { locale: es })
                                 : "-"}
                             </span>
-                            {biz.primary_category && (
+                            {(biz?.primary_category || biz?.category) && (
                               <>
                                 <span>•</span>
-                                <span>{biz.primary_category}</span>
+                                <span>{biz.primary_category || biz.category}</span>
                               </>
                             )}
                           </div>
                         </div>
-                      </div>
-                      <div className="flex items-center gap-2">
-                        <Button variant="ghost" size="sm">
-                          <Eye className="h-4 w-4" />
-                        </Button>
-                        <Button variant="default" size="sm" className="bg-success hover:bg-success/90">
-                          <Check className="h-4 w-4 mr-1" />
-                          Aprobar
-                        </Button>
                       </div>
                     </div>
                   ))}
@@ -322,7 +325,7 @@ const Dashboard = () => {
           {/* Main Content */}
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
             <div className="lg:col-span-2 space-y-6">
-              <RecentAppointments />
+              <NewClients />
             </div>
             <div className="space-y-6">
               <PendingApprovals />

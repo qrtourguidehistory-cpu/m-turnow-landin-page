@@ -65,10 +65,11 @@ export default function Auth() {
   };
 
   const handleTokenClick = () => {
-    setShowTokenDialog(true);
+    // Asegurarse de que los campos estén completamente vacíos
     setTokenEmail("");
     setTokenPhone("");
     setError(null);
+    setShowTokenDialog(true);
   };
 
   const handleTokenSubmit = async (e: React.FormEvent) => {
@@ -222,7 +223,18 @@ export default function Auth() {
       </Card>
 
       {/* Token Dialog */}
-      <Dialog open={showTokenDialog} onOpenChange={setShowTokenDialog}>
+      <Dialog 
+        open={showTokenDialog} 
+        onOpenChange={(open) => {
+          setShowTokenDialog(open);
+          if (!open) {
+            // Limpiar campos cuando se cierra el diálogo
+            setTokenEmail("");
+            setTokenPhone("");
+            setError(null);
+          }
+        }}
+      >
         <DialogContent className="sm:max-w-md">
           <DialogHeader>
             <DialogTitle>Recuperar Contraseña</DialogTitle>
@@ -242,11 +254,12 @@ export default function Auth() {
               <Input
                 id="token-email"
                 type="email"
-                placeholder="jordandn15@outlook.com"
+                placeholder="Ingresa tu correo electrónico"
                 value={tokenEmail}
                 onChange={(e) => setTokenEmail(e.target.value)}
                 required
                 disabled={isSendingToken}
+                autoComplete="off"
               />
             </div>
             <div className="space-y-2">
@@ -254,18 +267,24 @@ export default function Auth() {
               <Input
                 id="token-phone"
                 type="tel"
-                placeholder="8092195141"
+                placeholder="Ingresa tu número de teléfono"
                 value={tokenPhone}
                 onChange={(e) => setTokenPhone(e.target.value)}
                 required
                 disabled={isSendingToken}
+                autoComplete="off"
               />
             </div>
             <div className="flex justify-end gap-2">
               <Button
                 type="button"
                 variant="outline"
-                onClick={() => setShowTokenDialog(false)}
+                onClick={() => {
+                  setShowTokenDialog(false);
+                  setTokenEmail("");
+                  setTokenPhone("");
+                  setError(null);
+                }}
                 disabled={isSendingToken}
               >
                 Cancelar

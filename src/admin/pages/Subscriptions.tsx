@@ -39,6 +39,7 @@ import { cn } from "../lib/utils";
 import { format } from "date-fns";
 import { toast } from "sonner";
 import { Badge } from "../components/ui/badge";
+import { supabase } from "../integrations/supabase/client";
 
 const statusConfig = {
   active: { label: "Al día", className: "bg-success/10 text-success", icon: Check },
@@ -83,11 +84,15 @@ const Subscriptions = () => {
       });
 
       // Also update the business to be public and active
-      const { error: businessError } = await fetch(`/api/businesses/${selectedSubscription.business_id}`, {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ is_public: true, is_active: true }),
-      });
+      const { error: businessError } = await supabase
+        .from("businesses")
+        .update({ is_public: true, is_active: true })
+        .eq("id", selectedSubscription.business_id);
+
+      if (businessError) {
+        console.error("Error updating business:", businessError);
+        // Don't throw - subscription was updated successfully
+      }
 
       toast.success("Suscripción activada manualmente");
       setManualActivateDialogOpen(false);
