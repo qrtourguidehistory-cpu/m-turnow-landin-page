@@ -18,7 +18,10 @@ import {
   AlertTriangle,
   CheckCircle,
   Calendar,
-  Image
+  Image,
+  FileText,
+  Trash2,
+  RefreshCw
 } from "lucide-react";
 import { format, formatDistanceToNow } from "date-fns";
 import { es } from "date-fns/locale";
@@ -28,16 +31,18 @@ const Notifications = () => {
   const { data: notifications, isLoading } = useAdminNotifications();
 
   const stats = {
-    pendingApprovals: notifications?.pendingBusinesses?.length || 0,
+    pendingApprovals: (notifications?.pendingBusinesses?.length || 0) + (notifications?.approvalRequests?.length || 0),
     suspendedBusinesses: notifications?.suspendedBusinesses?.length || 0,
     blockedClients: notifications?.blockedClients?.length || 0,
     lowRatings: notifications?.lowRatingReviews?.length || 0,
     newClients: notifications?.newClients?.length || 0,
     newBusinesses: notifications?.newBusinesses?.length || 0,
     newStaff: notifications?.newStaff?.length || 0,
+    deletedAccounts: notifications?.deletedAccounts?.length || 0,
+    profileChanges: notifications?.profileChanges?.length || 0,
   };
 
-  const totalAlerts = stats.pendingApprovals + stats.suspendedBusinesses + stats.blockedClients + stats.lowRatings;
+  const totalAlerts = stats.pendingApprovals + stats.suspendedBusinesses + stats.blockedClients + stats.lowRatings + stats.deletedAccounts + stats.profileChanges;
 
   return (
     <AdminLayout>
@@ -217,6 +222,105 @@ const Notifications = () => {
                           </div>
                           <span className="text-xs text-muted-foreground">
                             {review.created_at && formatDistanceToNow(new Date(review.created_at), { addSuffix: true, locale: es })}
+                          </span>
+                        </div>
+                      ))}
+                    </div>
+                  </ScrollArea>
+                </CardContent>
+              </Card>
+            )}
+
+            {/* Approval Requests (including re-submissions) */}
+            {notifications?.approvalRequests && notifications.approvalRequests.length > 0 && (
+              <Card>
+                <CardHeader className="pb-3">
+                  <CardTitle className="text-lg flex items-center gap-2">
+                    <FileText className="h-5 w-5 text-warning" />
+                    Solicitudes de Aprobación Pendientes
+                  </CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <ScrollArea className="h-[200px]">
+                    <div className="space-y-2">
+                      {notifications.approvalRequests.map((req: any) => (
+                        <div key={req.id} className="flex items-center justify-between p-3 bg-warning/5 rounded-lg border border-warning/20">
+                          <div className="flex items-center gap-3">
+                            <FileText className="h-5 w-5 text-warning" />
+                            <div>
+                              <p className="font-medium">{req.business_name || "Sin nombre"}</p>
+                              <p className="text-xs text-muted-foreground">{req.business_email || req.notes || "Solicitud de aprobación"}</p>
+                            </div>
+                          </div>
+                          <span className="text-xs text-muted-foreground">
+                            {req.submitted_at && formatDistanceToNow(new Date(req.submitted_at), { addSuffix: true, locale: es })}
+                          </span>
+                        </div>
+                      ))}
+                    </div>
+                  </ScrollArea>
+                </CardContent>
+              </Card>
+            )}
+
+            {/* Profile Changes Requiring Re-approval */}
+            {notifications?.profileChanges && notifications.profileChanges.length > 0 && (
+              <Card>
+                <CardHeader className="pb-3">
+                  <CardTitle className="text-lg flex items-center gap-2">
+                    <RefreshCw className="h-5 w-5 text-primary" />
+                    Cambios de Perfil Requieren Re-aprobación
+                  </CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <ScrollArea className="h-[200px]">
+                    <div className="space-y-2">
+                      {notifications.profileChanges.map((req: any) => (
+                        <div key={req.id} className="flex items-center justify-between p-3 bg-primary/5 rounded-lg border border-primary/20">
+                          <div className="flex items-center gap-3">
+                            <RefreshCw className="h-5 w-5 text-primary" />
+                            <div>
+                              <p className="font-medium">{req.business_name || "Sin nombre"}</p>
+                              <p className="text-xs text-muted-foreground">Perfil modificado - requiere verificación</p>
+                              {req.notes && (
+                                <p className="text-xs text-muted-foreground italic mt-0.5">"{req.notes}"</p>
+                              )}
+                            </div>
+                          </div>
+                          <span className="text-xs text-muted-foreground">
+                            {req.submitted_at && formatDistanceToNow(new Date(req.submitted_at), { addSuffix: true, locale: es })}
+                          </span>
+                        </div>
+                      ))}
+                    </div>
+                  </ScrollArea>
+                </CardContent>
+              </Card>
+            )}
+
+            {/* Deleted Accounts */}
+            {notifications?.deletedAccounts && notifications.deletedAccounts.length > 0 && (
+              <Card>
+                <CardHeader className="pb-3">
+                  <CardTitle className="text-lg flex items-center gap-2">
+                    <Trash2 className="h-5 w-5 text-destructive" />
+                    Cuentas Eliminadas Recientemente
+                  </CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <ScrollArea className="h-[200px]">
+                    <div className="space-y-2">
+                      {notifications.deletedAccounts.map((account: any) => (
+                        <div key={account.id} className="flex items-center justify-between p-3 bg-destructive/5 rounded-lg border border-destructive/20">
+                          <div className="flex items-center gap-3">
+                            <Trash2 className="h-5 w-5 text-destructive" />
+                            <div>
+                              <p className="font-medium">{account.business_name || account.full_name || "Sin nombre"}</p>
+                              <p className="text-xs text-muted-foreground">{account.email || "Cuenta eliminada"}</p>
+                            </div>
+                          </div>
+                          <span className="text-xs text-muted-foreground">
+                            {account.updated_at && formatDistanceToNow(new Date(account.updated_at), { addSuffix: true, locale: es })}
                           </span>
                         </div>
                       ))}

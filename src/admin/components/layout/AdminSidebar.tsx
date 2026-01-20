@@ -13,6 +13,7 @@ import {
   Package,
   Calendar,
   ChevronDown,
+  CreditCard,
 } from "lucide-react";
 import { cn } from "../../lib/utils";
 import { Button } from "../ui/button";
@@ -36,6 +37,7 @@ const systemItems = [
   { title: "Moderación", url: "/admin/moderation", icon: Shield },
   { title: "Notificaciones", url: "/admin/notifications", icon: Bell },
   { title: "Analytics", url: "/admin/metrics", icon: BarChart3 },
+  { title: "Suscripciones", url: "/admin/subscriptions", icon: CreditCard },
   { title: "Configuración", url: "/admin/settings", icon: Settings },
 ];
 

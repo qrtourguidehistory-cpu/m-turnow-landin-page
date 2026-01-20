@@ -48,7 +48,7 @@ export function ProfileDropdown({ collapsed = false }: ProfileDropdownProps) {
   const handleLogout = async () => {
     toast.info("Cerrando sesión...");
     await signOut();
-    navigate("/auth", { replace: true });
+    window.location.href = "https://www.miturnow.com";
   };
 
   const getInitials = () => {

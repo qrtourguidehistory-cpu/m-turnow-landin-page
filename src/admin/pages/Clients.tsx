@@ -54,6 +54,7 @@ const statusConfig = {
 const Clients = () => {
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState<string>("all");
+  const [userTypeFilter, setUserTypeFilter] = useState<string>("all"); // "all", "client_app", "partner"
   const [editingClient, setEditingClient] = useState<Client | null>(null);
   const [editModalOpen, setEditModalOpen] = useState(false);
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
@@ -65,6 +66,12 @@ const Clients = () => {
     status: statusFilter as any,
     search: search || undefined,
   });
+
+  // Filtrar por tipo de usuario
+  const filteredClients = clients?.filter(client => {
+    if (userTypeFilter === "all") return true;
+    return client.source === userTypeFilter;
+  }) || [];
   
   const updateClient = useUpdateClient();
   
@@ -146,17 +153,27 @@ const Clients = () => {
     }
   };
 
-  const activeCount = clients?.filter(c => c.is_active && !c.is_blocked).length || 0;
-  const blockedCount = clients?.filter(c => c.is_blocked).length || 0;
-  const inactiveCount = clients?.filter(c => !c.is_active && !c.is_blocked).length || 0;
+  const clientAppUsers = filteredClients.filter(c => c.source === 'client_app');
+  const partnerUsers = filteredClients.filter(c => c.source === 'partner');
+  const activeCount = filteredClients.filter(c => c.is_active && !c.is_blocked).length || 0;
+  const blockedCount = filteredClients.filter(c => c.is_blocked).length || 0;
+  const inactiveCount = filteredClients.filter(c => !c.is_active && !c.is_blocked).length || 0;
 
   return (
     <AdminLayout title="Clientes" description="Gestiona todos los usuarios registrados en la plataforma">
       {/* Stats */}
-      <div className="grid grid-cols-4 gap-4">
+      <div className="grid grid-cols-6 gap-4">
         <div className="metric-card">
           <span className="text-sm text-muted-foreground">Total</span>
-          <p className="text-2xl font-semibold text-foreground mt-1">{clients?.length || 0}</p>
+          <p className="text-2xl font-semibold text-foreground mt-1">{filteredClients.length}</p>
+        </div>
+        <div className="metric-card">
+          <span className="text-sm text-muted-foreground">App Cliente</span>
+          <p className="text-2xl font-semibold text-primary mt-1">{clientAppUsers.length}</p>
+        </div>
+        <div className="metric-card">
+          <span className="text-sm text-muted-foreground">App Partner</span>
+          <p className="text-2xl font-semibold text-primary mt-1">{partnerUsers.length}</p>
         </div>
         <div className="metric-card">
           <span className="text-sm text-muted-foreground">Activos</span>
@@ -183,6 +200,16 @@ const Clients = () => {
             className="pl-9"
           />
         </div>
+        <Select value={userTypeFilter} onValueChange={setUserTypeFilter}>
+          <SelectTrigger className="w-[180px]">
+            <SelectValue placeholder="Tipo de usuario" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">Todos los usuarios</SelectItem>
+            <SelectItem value="client_app">App Cliente</SelectItem>
+            <SelectItem value="partner">App Partner</SelectItem>
+          </SelectContent>
+        </Select>
         <Select value={statusFilter} onValueChange={setStatusFilter}>
           <SelectTrigger className="w-[160px]">
             <SelectValue placeholder="Estado" />
@@ -218,14 +245,14 @@ const Clients = () => {
                     <Loader2 className="h-5 w-5 animate-spin mx-auto text-muted-foreground" />
                   </TableCell>
                 </TableRow>
-              ) : clients?.length === 0 ? (
+              ) : filteredClients.length === 0 ? (
                 <TableRow>
                   <TableCell colSpan={7} className="h-32 text-center text-muted-foreground">
                     No se encontraron clientes
                   </TableCell>
                 </TableRow>
               ) : (
-                clients?.map((client) => {
+                filteredClients.map((client) => {
                   const status = getStatus(client);
                   const config = statusConfig[status];
                   const initials = (client.full_name || client.first_name || "?").split(" ").map(n => n[0]).join("").slice(0, 2).toUpperCase();
@@ -238,7 +265,17 @@ const Clients = () => {
                             <AvatarFallback className="bg-primary/10 text-primary text-xs">{initials}</AvatarFallback>
                           </Avatar>
                           <div className="min-w-0">
-                            <p className="font-medium text-foreground truncate">{client.full_name || `${client.first_name || ""} ${client.last_name || ""}`.trim() || "Sin nombre"}</p>
+                            <div className="flex items-center gap-2">
+                              <p className="font-medium text-foreground truncate">{client.full_name || `${client.first_name || ""} ${client.last_name || ""}`.trim() || "Sin nombre"}</p>
+                              {client.source && (
+                                <span className={cn(
+                                  "text-[10px] px-1.5 py-0.5 rounded font-medium",
+                                  client.source === 'client_app' ? "bg-blue-500/10 text-blue-500" : "bg-purple-500/10 text-purple-500"
+                                )}>
+                                  {client.source === 'client_app' ? 'Cliente' : 'Partner'}
+                                </span>
+                              )}
+                            </div>
                             <p className="text-xs text-muted-foreground truncate">{client.email || "Sin email"}</p>
                           </div>
                         </div>

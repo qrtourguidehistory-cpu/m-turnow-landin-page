@@ -23,17 +23,44 @@ import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
+  DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "../components/ui/dropdown-menu";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from "../components/ui/dialog";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "../components/ui/alert-dialog";
 import { Avatar, AvatarFallback } from "../components/ui/avatar";
 import { ScrollArea } from "../components/ui/scroll-area";
-import { Search, MoreHorizontal, Eye, Loader2, Building2 } from "lucide-react";
+import { Search, MoreHorizontal, Eye, Loader2, Building2, UserX, Ban, Trash2, Check, X } from "lucide-react";
 import { cn } from "../lib/utils";
 import { format } from "date-fns";
+import { toast } from "sonner";
+import { supabase } from "../integrations/supabase/client";
+import { useMutation, useQueryClient } from "@tanstack/react-query";
 
 const Staff = () => {
   const [search, setSearch] = useState("");
   const [businessFilter, setBusinessFilter] = useState<string>("all");
+  const [selectedStaff, setSelectedStaff] = useState<any>(null);
+  const [detailDialogOpen, setDetailDialogOpen] = useState(false);
+  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
+  const [staffToDelete, setStaffToDelete] = useState<any>(null);
+  
+  const queryClient = useQueryClient();
   
   const { data: businesses } = useBusinesses();
   const { data: staff, isLoading } = useStaff({ 
@@ -42,6 +69,73 @@ const Staff = () => {
   });
 
   const activeCount = staff?.filter(s => s.is_active).length || 0;
+
+  const updateStaffMutation = useMutation({
+    mutationFn: async ({ id, updates }: { id: string; updates: any }) => {
+      const { error } = await supabase
+        .from("staff")
+        .update(updates)
+        .eq("id", id);
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["staff"] });
+      toast.success("Staff actualizado correctamente");
+    },
+  });
+
+  const deleteStaffMutation = useMutation({
+    mutationFn: async (id: string) => {
+      const { error } = await supabase
+        .from("staff")
+        .delete()
+        .eq("id", id);
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["staff"] });
+      toast.success("Staff eliminado correctamente");
+      setDeleteDialogOpen(false);
+      setStaffToDelete(null);
+    },
+  });
+
+  const handleViewDetails = (member: any) => {
+    setSelectedStaff(member);
+    setDetailDialogOpen(true);
+  };
+
+  const handleSuspend = async (id: string, name: string) => {
+    try {
+      await updateStaffMutation.mutateAsync({ id, updates: { is_active: false } });
+      toast.success(`${name} ha sido suspendido`);
+    } catch {
+      toast.error("Error al suspender el staff");
+    }
+  };
+
+  const handleActivate = async (id: string, name: string) => {
+    try {
+      await updateStaffMutation.mutateAsync({ id, updates: { is_active: true } });
+      toast.success(`${name} ha sido activado`);
+    } catch {
+      toast.error("Error al activar el staff");
+    }
+  };
+
+  const handleDeleteClick = (member: any) => {
+    setStaffToDelete(member);
+    setDeleteDialogOpen(true);
+  };
+
+  const handleDeleteConfirm = async () => {
+    if (!staffToDelete) return;
+    try {
+      await deleteStaffMutation.mutateAsync(staffToDelete.id);
+    } catch {
+      toast.error("Error al eliminar el staff");
+    }
+  };
 
   return (
     <AdminLayout title="Staff" description="Personal de todos los establecimientos">
@@ -156,7 +250,23 @@ const Staff = () => {
                             </Button>
                           </DropdownMenuTrigger>
                           <DropdownMenuContent align="end">
-                            <DropdownMenuItem><Eye className="h-4 w-4 mr-2" /> Ver detalles</DropdownMenuItem>
+                            <DropdownMenuItem onClick={() => handleViewDetails(member)}>
+                              <Eye className="h-4 w-4 mr-2" /> Ver detalles
+                            </DropdownMenuItem>
+                            <DropdownMenuSeparator />
+                            {member.is_active ? (
+                              <DropdownMenuItem onClick={() => handleSuspend(member.id, member.full_name || "Staff")} className="text-warning">
+                                <UserX className="h-4 w-4 mr-2" /> Suspender
+                              </DropdownMenuItem>
+                            ) : (
+                              <DropdownMenuItem onClick={() => handleActivate(member.id, member.full_name || "Staff")}>
+                                <Check className="h-4 w-4 mr-2" /> Activar
+                              </DropdownMenuItem>
+                            )}
+                            <DropdownMenuSeparator />
+                            <DropdownMenuItem onClick={() => handleDeleteClick(member)} className="text-destructive">
+                              <Trash2 className="h-4 w-4 mr-2" /> Eliminar
+                            </DropdownMenuItem>
                           </DropdownMenuContent>
                         </DropdownMenu>
                       </TableCell>
@@ -168,6 +278,89 @@ const Staff = () => {
           </Table>
         </ScrollArea>
       </div>
+
+      {/* Detail Dialog */}
+      <Dialog open={detailDialogOpen} onOpenChange={setDetailDialogOpen}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Detalles del Staff</DialogTitle>
+            <DialogDescription>
+              Información completa del miembro del equipo
+            </DialogDescription>
+          </DialogHeader>
+          {selectedStaff && (
+            <div className="space-y-4">
+              <div className="flex items-center gap-4">
+                <Avatar className="h-16 w-16">
+                  <AvatarFallback className="bg-primary/10 text-primary text-lg">
+                    {(selectedStaff.full_name || "?").split(" ").map(n => n[0]).join("").slice(0, 2).toUpperCase()}
+                  </AvatarFallback>
+                </Avatar>
+                <div>
+                  <p className="font-semibold text-lg">{selectedStaff.full_name || "Sin nombre"}</p>
+                  <p className="text-sm text-muted-foreground">{selectedStaff.business_name || "-"}</p>
+                </div>
+              </div>
+              <div className="space-y-3 pt-4 border-t">
+                <div>
+                  <p className="text-sm font-medium text-muted-foreground">Email</p>
+                  <p className="text-sm">{selectedStaff.email || "-"}</p>
+                </div>
+                <div>
+                  <p className="text-sm font-medium text-muted-foreground">Teléfono</p>
+                  <p className="text-sm">{selectedStaff.phone || "-"}</p>
+                </div>
+                <div>
+                  <p className="text-sm font-medium text-muted-foreground">Especialidades</p>
+                  <p className="text-sm">{selectedStaff.specialties?.join(", ") || "-"}</p>
+                </div>
+                {selectedStaff.bio && (
+                  <div>
+                    <p className="text-sm font-medium text-muted-foreground">Biografía</p>
+                    <p className="text-sm">{selectedStaff.bio}</p>
+                  </div>
+                )}
+                <div>
+                  <p className="text-sm font-medium text-muted-foreground">Estado</p>
+                  <span className={cn(
+                    "inline-flex px-2 py-0.5 rounded text-xs font-medium",
+                    selectedStaff.is_active ? "bg-success/10 text-success" : "bg-muted text-muted-foreground"
+                  )}>
+                    {selectedStaff.is_active ? "Activo" : "Inactivo"}
+                  </span>
+                </div>
+                {selectedStaff.created_at && (
+                  <div>
+                    <p className="text-sm font-medium text-muted-foreground">Registrado</p>
+                    <p className="text-sm">{format(new Date(selectedStaff.created_at), "dd/MM/yyyy")}</p>
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
+
+      {/* Delete Confirmation Dialog */}
+      <AlertDialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>¿Eliminar staff?</AlertDialogTitle>
+            <AlertDialogDescription>
+              Esta acción eliminará permanentemente a {staffToDelete?.full_name || "este miembro del staff"} y todos sus datos asociados. Esta acción no se puede deshacer.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancelar</AlertDialogCancel>
+            <AlertDialogAction 
+              onClick={handleDeleteConfirm}
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+            >
+              Eliminar
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </AdminLayout>
   );
 };

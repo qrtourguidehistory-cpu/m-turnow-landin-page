@@ -1,6 +1,10 @@
 {
   "rewrites": [
-    { "source": "/", "destination": "/landing/index.html" },
+    { "source": "/", "destination": "/index.html" },
+    { "source": "/contacto", "destination": "/index.html" },
+    { "source": "/terminos", "destination": "/index.html" },
+    { "source": "/privacidad", "destination": "/index.html" },
+    { "source": "/cookies", "destination": "/index.html" },
     { "source": "/admin/:path*", "destination": "/index.html" }
   ]
 }

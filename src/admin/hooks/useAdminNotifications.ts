@@ -27,6 +27,9 @@ export function useAdminNotifications() {
         newClientsRes,
         newBusinessesRes,
         recentStaffRes,
+        approvalRequestsRes,
+        deletedAccountsRes,
+        profileChangesRes,
       ] = await Promise.all([
         // Pending businesses
         supabase
@@ -83,6 +86,49 @@ export function useAdminNotifications() {
           .gte("created_at", sevenDaysAgo.toISOString())
           .order("created_at", { ascending: false })
           .limit(10),
+
+        // Pending approval requests (including re-submissions)
+        supabase
+          .from("business_approval_requests")
+          .select(`
+            id,
+            business_id,
+            submitted_at,
+            notes,
+            status,
+            business:businesses!business_approval_requests_business_id_fkey (
+              id,
+              business_name,
+              email
+            )
+          `)
+          .eq("status", "pending")
+          .order("submitted_at", { ascending: false })
+          .limit(10),
+
+        // Deleted accounts - placeholder query (implement proper tracking with soft delete or audit log)
+        Promise.resolve({ data: [], error: null } as any),
+
+        // Profile changes requiring re-approval (businesses that changed and resubmitted)
+        supabase
+          .from("business_approval_requests")
+          .select(`
+            id,
+            business_id,
+            submitted_at,
+            notes,
+            status,
+            business:businesses!business_approval_requests_business_id_fkey (
+              id,
+              business_name,
+              email,
+              updated_at
+            )
+          `)
+          .eq("status", "pending")
+          .gte("submitted_at", sevenDaysAgo.toISOString())
+          .order("submitted_at", { ascending: false })
+          .limit(10),
       ]);
 
       return {
@@ -96,6 +142,17 @@ export function useAdminNotifications() {
           ...s,
           business_name: s.businesses?.business_name || "Negocio",
         })),
+        approvalRequests: (approvalRequestsRes.data || []).map((req: any) => ({
+          ...req,
+          business_name: req.business?.business_name || "Negocio",
+          business_email: req.business?.email || null,
+        })),
+        deletedAccounts: deletedAccountsRes.data || [],
+        profileChanges: (profileChangesRes.data || []).map((req: any) => ({
+          ...req,
+          business_name: req.business?.business_name || "Negocio",
+          business_email: req.business?.email || null,
+        })),
         stats: {
           pending: pendingRes.data?.length || 0,
           suspended: suspendedRes.data?.length || 0,
@@ -103,6 +160,8 @@ export function useAdminNotifications() {
           lowReviews: lowReviewsRes.data?.length || 0,
           newClients: newClientsRes.data?.length || 0,
           newBusinesses: newBusinessesRes.data?.length || 0,
+          approvalRequests: approvalRequestsRes.data?.length || 0,
+          profileChanges: profileChangesRes.data?.length || 0,
         },
       };
     },

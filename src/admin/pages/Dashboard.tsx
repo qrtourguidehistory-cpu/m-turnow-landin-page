@@ -239,6 +239,58 @@ const Dashboard = () => {
             </Card>
           )}
 
+          {/* Key Rates (from Analytics) */}
+          <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+            <Card>
+              <CardContent className="pt-6">
+                <div className="text-center">
+                  <p className="text-4xl font-bold text-green-500">
+                    {stats?.totalBusinesses 
+                      ? Math.round((stats.activeBusinesses / stats.totalBusinesses) * 100) 
+                      : 0}%
+                  </p>
+                  <p className="text-sm text-muted-foreground mt-1">Negocios Activos</p>
+                </div>
+              </CardContent>
+            </Card>
+            <Card>
+              <CardContent className="pt-6">
+                <div className="text-center">
+                  <p className="text-4xl font-bold text-blue-500">
+                    {stats?.totalClients 
+                      ? Math.round((stats.activeClients / stats.totalClients) * 100) 
+                      : 0}%
+                  </p>
+                  <p className="text-sm text-muted-foreground mt-1">Clientes Activos</p>
+                </div>
+              </CardContent>
+            </Card>
+            <Card>
+              <CardContent className="pt-6">
+                <div className="text-center">
+                  <p className="text-4xl font-bold text-orange-500">
+                    {stats?.appointmentsThisMonth 
+                      ? Math.round((stats.cancelledAppointments / stats.appointmentsThisMonth) * 100) 
+                      : 0}%
+                  </p>
+                  <p className="text-sm text-muted-foreground mt-1">Tasa Cancelación</p>
+                </div>
+              </CardContent>
+            </Card>
+            <Card>
+              <CardContent className="pt-6">
+                <div className="text-center">
+                  <p className="text-4xl font-bold text-destructive">
+                    {stats?.appointmentsThisMonth 
+                      ? Math.round((stats.noShowAppointments / stats.appointmentsThisMonth) * 100) 
+                      : 0}%
+                  </p>
+                  <p className="text-sm text-muted-foreground mt-1">Tasa No-Show</p>
+                </div>
+              </CardContent>
+            </Card>
+          </div>
+
           {/* Secondary Metrics */}
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
             <MetricCard
