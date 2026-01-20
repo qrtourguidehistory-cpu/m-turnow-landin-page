@@ -1,0 +1,227 @@
+@charset "UTF-8";
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&display=swap');
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    --background: 0 0% 100%;
+    --foreground: 0 0% 8%;
+
+    --card: 0 0% 98%;
+    --card-foreground: 0 0% 8%;
+
+    --popover: 0 0% 100%;
+    --popover-foreground: 0 0% 8%;
+
+    --primary: 0 0% 8%;
+    --primary-foreground: 0 0% 100%;
+
+    --secondary: 0 0% 96%;
+    --secondary-foreground: 0 0% 8%;
+
+    --muted: 0 0% 94%;
+    --muted-foreground: 0 0% 45%;
+
+    --accent: 0 0% 12%;
+    --accent-foreground: 0 0% 100%;
+
+    --destructive: 0 84.2% 60.2%;
+    --destructive-foreground: 0 0% 100%;
+
+    --border: 0 0% 90%;
+    --input: 0 0% 90%;
+    --ring: 0 0% 8%;
+
+    --radius: 0.75rem;
+
+    /* Custom Turnow tokens */
+    --turnow-dark: 0 0% 8%;
+    --turnow-carbon: 0 0% 12%;
+    --turnow-gray: 0 0% 20%;
+    --turnow-light: 0 0% 96%;
+    --turnow-white: 0 0% 100%;
+    --turnow-accent: 45 100% 60%;
+
+    /* Gradients */
+    --gradient-carbon: linear-gradient(135deg, hsl(0 0% 8%) 0%, hsl(0 0% 15%) 50%, hsl(0 0% 10%) 100%);
+    --gradient-shine: linear-gradient(90deg, transparent 0%, hsla(0, 0%, 100%, 0.05) 50%, transparent 100%);
+    
+    /* Shadows */
+    --shadow-soft: 0 4px 20px -4px hsla(0, 0%, 0%, 0.1);
+    --shadow-elevated: 0 20px 60px -15px hsla(0, 0%, 0%, 0.3);
+    --shadow-phone: 0 50px 100px -20px hsla(0, 0%, 0%, 0.5);
+  }
+
+  .dark {
+    --background: 0 0% 8%;
+    --foreground: 0 0% 96%;
+    --card: 0 0% 12%;
+    --card-foreground: 0 0% 96%;
+    --popover: 0 0% 12%;
+    --popover-foreground: 0 0% 96%;
+    --primary: 0 0% 100%;
+    --primary-foreground: 0 0% 8%;
+    --secondary: 0 0% 20%;
+    --secondary-foreground: 0 0% 96%;
+    --muted: 0 0% 20%;
+    --muted-foreground: 0 0% 60%;
+    --accent: 0 0% 25%;
+    --accent-foreground: 0 0% 100%;
+    --border: 0 0% 20%;
+    --input: 0 0% 20%;
+    --ring: 0 0% 80%;
+  }
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+
+  html {
+    scroll-behavior: smooth;
+  }
+
+  body {
+    @apply bg-background text-foreground font-sans antialiased;
+    font-family: 'Inter', system-ui, sans-serif;
+  }
+}
+
+@layer components {
+  /* Carbon fiber texture background - diagonal weave pattern */
+  .bg-carbon {
+    background-color: hsl(0 0% 6%);
+    background-image: 
+      /* 3D shine overlay */
+      radial-gradient(
+        ellipse 60% 40% at 30% 20%,
+        hsla(0, 0%, 100%, 0.03) 0%,
+        transparent 50%
+      ),
+      /* Diagonal carbon fiber weave - dark stripes */
+      repeating-linear-gradient(
+        45deg,
+        hsl(0 0% 4%) 0px,
+        hsl(0 0% 4%) 4px,
+        hsl(0 0% 12%) 4px,
+        hsl(0 0% 12%) 8px
+      ),
+      /* Overlay weave for 3D depth */
+      repeating-linear-gradient(
+        -45deg,
+        transparent 0px,
+        transparent 4px,
+        hsla(0, 0%, 0%, 0.3) 4px,
+        hsla(0, 0%, 0%, 0.3) 8px
+      );
+    background-size: 100% 100%, 8px 8px, 8px 8px;
+  }
+
+  /* Subtle grid pattern */
+  .bg-grid {
+    background-image: 
+      linear-gradient(hsla(0, 0%, 100%, 0.03) 1px, transparent 1px),
+      linear-gradient(90deg, hsla(0, 0%, 100%, 0.03) 1px, transparent 1px);
+    background-size: 50px 50px;
+  }
+
+  /* Phone mockup styling */
+  .phone-mockup {
+    @apply relative rounded-[3rem] bg-gradient-to-b from-neutral-800 to-neutral-900 p-2;
+    box-shadow: 
+      inset 0 0 0 2px hsla(0, 0%, 100%, 0.1),
+      0 50px 100px -20px hsla(0, 0%, 0%, 0.5),
+      0 0 0 1px hsla(0, 0%, 0%, 0.5);
+  }
+
+  .phone-screen {
+    @apply rounded-[2.5rem] overflow-hidden bg-white;
+  }
+
+  .phone-notch {
+    @apply absolute top-4 left-1/2 -translate-x-1/2 w-24 h-6 bg-black rounded-full z-10;
+  }
+
+  /* Button variants */
+  .btn-primary {
+    @apply inline-flex items-center gap-2 px-6 py-3 bg-primary text-primary-foreground font-semibold rounded-full transition-all duration-300 hover:scale-105 hover:shadow-lg;
+  }
+
+  .btn-secondary {
+    @apply inline-flex items-center gap-2 px-6 py-3 bg-transparent border-2 border-white text-white font-semibold rounded-full transition-all duration-300 hover:bg-white hover:text-primary;
+  }
+
+  .btn-outline-dark {
+    @apply inline-flex items-center gap-2 px-6 py-3 bg-transparent border-2 border-primary text-primary font-semibold rounded-full transition-all duration-300 hover:bg-primary hover:text-primary-foreground;
+  }
+
+  /* Store badge styling */
+  .store-badge {
+    @apply flex items-center gap-3 px-5 py-3 bg-primary text-primary-foreground rounded-xl transition-all duration-300 hover:scale-105;
+  }
+
+  .store-badge-light {
+    @apply flex items-center gap-3 px-5 py-3 bg-white text-primary rounded-xl transition-all duration-300 hover:scale-105 shadow-lg;
+  }
+
+  /* Section transitions */
+  .section-dark {
+    @apply bg-carbon text-white;
+  }
+
+  .section-light {
+    @apply bg-background text-foreground;
+  }
+
+  /* Feature card */
+  .feature-card {
+    @apply p-8 rounded-2xl bg-white/5 backdrop-blur-sm border border-white/10 transition-all duration-500 hover:bg-white/10 hover:border-white/20;
+  }
+
+  /* Stats card */
+  .stats-card {
+    @apply p-6 rounded-2xl transition-all duration-300 hover:scale-105;
+  }
+
+  /* Text gradients */
+  .text-gradient {
+    @apply bg-clip-text text-transparent bg-gradient-to-r from-white to-white/70;
+  }
+
+  /* Headline styling */
+  .headline-xl {
+    @apply text-5xl md:text-7xl lg:text-8xl font-black tracking-tight leading-none;
+  }
+
+  .headline-lg {
+    @apply text-4xl md:text-5xl lg:text-6xl font-bold tracking-tight leading-tight;
+  }
+
+  .headline-md {
+    @apply text-3xl md:text-4xl font-bold tracking-tight;
+  }
+
+  /* Smooth scrolling container */
+  .scroll-container {
+    @apply overflow-hidden;
+  }
+}
+
+@layer utilities {
+  .animation-delay-100 {
+    animation-delay: 100ms;
+  }
+  .animation-delay-200 {
+    animation-delay: 200ms;
+  }
+  .animation-delay-300 {
+    animation-delay: 300ms;
+  }
+  .animation-delay-500 {
+    animation-delay: 500ms;
+  }
+}
