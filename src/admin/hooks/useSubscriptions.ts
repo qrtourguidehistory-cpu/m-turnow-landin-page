@@ -13,12 +13,14 @@ export interface BusinessSubscription {
   last_payment_date: string | null;
   next_payment_date: string | null;
   payment_due_date: string | null;
+  current_period_end: string | null;
   amount_paid: number;
   amount_due: number;
   days_overdue: number;
   payment_history: any[];
   notes: string | null;
   manually_activated: boolean;
+  activation_note: string | null;
   activated_by: string | null;
   activated_at: string | null;
   created_at: string;
@@ -103,6 +105,57 @@ export function useSubscriptions(filters: SubscriptionFilters = {}) {
   });
 }
 
+export function useSubscriptionByBusinessId(businessId: string | null) {
+  return useQuery({
+    queryKey: ["subscription", businessId],
+    queryFn: async (): Promise<BusinessSubscription | null> => {
+      if (!businessId) return null;
+
+      const { data, error } = await supabase
+        .from("business_subscriptions")
+        .select("*")
+        .eq("business_id", businessId)
+        .single();
+
+      if (error) {
+        if (error.code === "PGRST116") {
+          // No subscription found
+          return null;
+        }
+        throw error;
+      }
+
+      // Fetch business name and owner email
+      const { data: businessData } = await supabase
+        .from("businesses")
+        .select("id, business_name")
+        .eq("id", businessId)
+        .single();
+
+      let ownerEmail = null;
+      if (data.owner_id) {
+        try {
+          const { data: profileData } = await supabase
+            .from("profiles")
+            .select("id, email")
+            .eq("id", data.owner_id)
+            .single();
+          ownerEmail = profileData?.email || null;
+        } catch (err) {
+          console.warn("Could not fetch owner profile");
+        }
+      }
+
+      return {
+        ...data,
+        business_name: businessData?.business_name || null,
+        owner_email: ownerEmail,
+      };
+    },
+    enabled: !!businessId,
+  });
+}
+
 export function useUpdateSubscription() {
   const queryClient = useQueryClient();
 
@@ -133,6 +186,7 @@ export function useUpdateSubscription() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["subscriptions"] });
+      queryClient.invalidateQueries({ queryKey: ["subscription"] });
       queryClient.invalidateQueries({ queryKey: ["businesses"] });
       queryClient.invalidateQueries({ queryKey: ["dashboard-stats"] });
     },
