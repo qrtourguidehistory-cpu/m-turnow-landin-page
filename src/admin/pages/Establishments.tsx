@@ -27,7 +27,10 @@ import {
 } from "../components/ui/dropdown-menu";
 import { EstablishmentDetailSheet } from "../components/establishments/EstablishmentDetailSheet";
 import { ScrollArea } from "../components/ui/scroll-area";
-import { Search, MoreHorizontal, Eye, Check, Ban, Loader2, Building2, Star, Filter } from "lucide-react";
+import { ManualActivationDialog } from "../components/subscriptions/ManualActivationDialog";
+import { useSubscriptionByBusinessId, useUpdateSubscription } from "../hooks/useSubscriptions";
+import { supabase } from "../integrations/supabase/client";
+import { Search, MoreHorizontal, Eye, Check, Ban, Loader2, Building2, Star, Filter, CreditCard } from "lucide-react";
 import { cn } from "../lib/utils";
 import { toast } from "sonner";
 import { format } from "date-fns";
@@ -78,6 +81,8 @@ const Establishments = () => {
   const [sortBy, setSortBy] = useState<string>("recent");
   const [selectedBusiness, setSelectedBusiness] = useState<Business | null>(null);
   const [detailsOpen, setDetailsOpen] = useState(false);
+  const [subscriptionDialogOpen, setSubscriptionDialogOpen] = useState(false);
+  const [businessForSubscription, setBusinessForSubscription] = useState<Business | null>(null);
   
   const { data: businesses, isLoading, refetch } = useBusinesses({
     status: statusFilter as any,
@@ -86,6 +91,8 @@ const Establishments = () => {
   });
   
   const updateBusiness = useUpdateBusiness();
+  const updateSubscription = useUpdateSubscription();
+  const { data: subscriptionData } = useSubscriptionByBusinessId(businessForSubscription?.id || null);
 
   const getStatus = (biz: Business) => {
     if (!biz.is_active) return "suspended";
@@ -136,6 +143,81 @@ const Establishments = () => {
     } catch (error: any) {
       toast.error(`Error: ${error?.message || "No se pudo realizar la acción."}`);
     }
+  };
+
+  const handleManageSubscription = (biz: Business) => {
+    setBusinessForSubscription(biz);
+    setSubscriptionDialogOpen(true);
+  };
+
+  const handleManualActivate = async (periodEnd: Date, activationNote: string) => {
+    if (!businessForSubscription) return;
+
+    // Buscar o crear la suscripción para este negocio
+    let subscriptionId = subscriptionData?.id;
+
+    // Si no existe suscripción, crearla
+    if (!subscriptionId) {
+      const { data: newSubscription, error: createError } = await supabase
+        .from("business_subscriptions")
+        .insert({
+          business_id: businessForSubscription.id,
+          owner_id: businessForSubscription.owner_id,
+          status: "active",
+          subscription_plan: "monthly",
+          monthly_fee: 9.50,
+          manually_activated: true,
+          activation_note: activationNote || null,
+          current_period_end: periodEnd.toISOString(),
+          next_payment_date: periodEnd.toISOString(),
+          payment_due_date: periodEnd.toISOString(),
+          amount_due: 0,
+          days_overdue: 0,
+        })
+        .select()
+        .single();
+
+      if (createError) {
+        toast.error(`Error al crear suscripción: ${createError.message}`);
+        return;
+      }
+      subscriptionId = newSubscription.id;
+    } else {
+      // Actualizar suscripción existente
+      try {
+        await updateSubscription.mutateAsync({
+          id: subscriptionId,
+          updates: {
+            status: "active",
+            manually_activated: true,
+            activation_note: activationNote || null,
+            current_period_end: periodEnd.toISOString(),
+            next_payment_date: periodEnd.toISOString(),
+            payment_due_date: periodEnd.toISOString(),
+            amount_due: 0,
+            days_overdue: 0,
+          },
+        });
+      } catch (err: any) {
+        toast.error(err.message || "Error al actualizar la suscripción");
+        return;
+      }
+    }
+
+    // Actualizar el negocio para que sea público y activo
+    const { error: businessError } = await supabase
+      .from("businesses")
+      .update({ is_public: true, is_active: true })
+      .eq("id", businessForSubscription.id);
+
+    if (businessError) {
+      console.error("Error updating business:", businessError);
+    }
+
+    toast.success(`Suscripción activada manualmente hasta ${format(periodEnd, "dd/MM/yyyy")}`);
+    setSubscriptionDialogOpen(false);
+    setBusinessForSubscription(null);
+    refetch();
   };
 
   // Sort and filter businesses
@@ -323,6 +405,10 @@ const Establishments = () => {
                               <Eye className="h-4 w-4 mr-2" /> Ver detalles
                             </DropdownMenuItem>
                             <DropdownMenuSeparator />
+                            <DropdownMenuItem onClick={() => handleManageSubscription(biz)}>
+                              <CreditCard className="h-4 w-4 mr-2 text-primary" /> Gestionar Suscripción
+                            </DropdownMenuItem>
+                            <DropdownMenuSeparator />
                             {status === "pending" && (
                               <DropdownMenuItem onClick={() => handleAction(biz.id, "approve", biz.business_name || "")}>
                                 <Check className="h-4 w-4 mr-2 text-success" /> Aprobar
@@ -359,6 +445,21 @@ const Establishments = () => {
         onSuspend={(id, name) => handleAction(id, "suspend", name)}
         onActivate={(id, name) => handleAction(id, "activate", name)}
         isActionPending={updateBusiness.isPending}
+      />
+
+      {/* Manual Activation Dialog */}
+      <ManualActivationDialog
+        open={subscriptionDialogOpen}
+        onOpenChange={(open) => {
+          setSubscriptionDialogOpen(open);
+          if (!open) {
+            setBusinessForSubscription(null);
+          }
+        }}
+        subscription={subscriptionData}
+        businessName={businessForSubscription?.business_name}
+        onActivate={handleManualActivate}
+        isPending={updateSubscription.isPending}
       />
     </AdminLayout>
   );

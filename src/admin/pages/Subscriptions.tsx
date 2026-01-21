@@ -35,6 +35,7 @@ import {
 import { Label } from "../components/ui/label";
 import { Textarea } from "../components/ui/textarea";
 import { Search, MoreHorizontal, Loader2, Building2, CreditCard, Check, AlertTriangle, Calendar, DollarSign } from "lucide-react";
+import { ManualActivationDialog } from "../components/subscriptions/ManualActivationDialog";
 import { cn } from "../lib/utils";
 import { format } from "date-fns";
 import { toast } from "sonner";
@@ -54,9 +55,6 @@ const Subscriptions = () => {
   const [statusFilter, setStatusFilter] = useState<string>("all");
   const [selectedSubscription, setSelectedSubscription] = useState<BusinessSubscription | null>(null);
   const [manualActivateDialogOpen, setManualActivateDialogOpen] = useState(false);
-  const [activationNote, setActivationNote] = useState("");
-  const [durationValue, setDurationValue] = useState<string>("30");
-  const [durationUnit, setDurationUnit] = useState<"days" | "months" | "years">("days");
 
   const { data: subscriptions, isLoading } = useSubscriptions({
     status: statusFilter,
@@ -69,30 +67,8 @@ const Subscriptions = () => {
   const pastDueCount = subscriptions?.filter(s => s.status === "past_due").length || 0;
   const totalDue = subscriptions?.reduce((sum, s) => sum + (s.amount_due || 0), 0) || 0;
 
-  const calculatePeriodEnd = (): Date => {
-    const now = new Date();
-    const value = parseInt(durationValue) || 30;
-    
-    switch (durationUnit) {
-      case "days":
-        return new Date(now.getTime() + value * 24 * 60 * 60 * 1000);
-      case "months":
-        const monthsFromNow = new Date(now);
-        monthsFromNow.setMonth(monthsFromNow.getMonth() + value);
-        return monthsFromNow;
-      case "years":
-        const yearsFromNow = new Date(now);
-        yearsFromNow.setFullYear(yearsFromNow.getFullYear() + value);
-        return yearsFromNow;
-      default:
-        return new Date(now.getTime() + 30 * 24 * 60 * 60 * 1000);
-    }
-  };
-
-  const handleManualActivate = async () => {
+  const handleManualActivate = async (periodEnd: Date, activationNote: string) => {
     if (!selectedSubscription) return;
-
-    const periodEnd = calculatePeriodEnd();
 
     try {
       await updateSubscription.mutateAsync({
@@ -123,9 +99,6 @@ const Subscriptions = () => {
       toast.success(`Suscripción activada manualmente hasta ${format(periodEnd, "dd/MM/yyyy")}`);
       setManualActivateDialogOpen(false);
       setSelectedSubscription(null);
-      setActivationNote("");
-      setDurationValue("30");
-      setDurationUnit("days");
     } catch (err: any) {
       toast.error(err.message || "Error al activar la suscripción");
     }
@@ -300,92 +273,13 @@ const Subscriptions = () => {
       </div>
 
       {/* Manual Activation Dialog */}
-      <Dialog open={manualActivateDialogOpen} onOpenChange={setManualActivateDialogOpen}>
-        <DialogContent className="sm:max-w-lg">
-          <DialogHeader>
-            <DialogTitle>Activar Suscripción Manualmente</DialogTitle>
-            <DialogDescription>
-              Activa esta suscripción manualmente por un período de tiempo específico (pago efectivo, transferencia, o corrección de error)
-            </DialogDescription>
-          </DialogHeader>
-          {selectedSubscription && (
-            <div className="space-y-4">
-              <div>
-                <p className="text-sm font-medium mb-1">Negocio</p>
-                <p className="text-sm text-muted-foreground">{selectedSubscription.business_name || "-"}</p>
-              </div>
-
-              {/* Duration Selection */}
-              <div className="space-y-3">
-                <Label>Duración de la Activación</Label>
-                <div className="flex gap-3 items-center">
-                  <Input
-                    type="number"
-                    min="1"
-                    value={durationValue}
-                    onChange={(e) => setDurationValue(e.target.value)}
-                    className="w-24"
-                    placeholder="30"
-                  />
-                  <Select value={durationUnit} onValueChange={(value: "days" | "months" | "years") => setDurationUnit(value)}>
-                    <SelectTrigger className="w-32">
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="days">Días</SelectItem>
-                      <SelectItem value="months">Meses</SelectItem>
-                      <SelectItem value="years">Años</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-                <p className="text-xs text-muted-foreground">
-                  La suscripción estará activa hasta: <strong>{format(calculatePeriodEnd(), "dd/MM/yyyy 'a las' HH:mm")}</strong>
-                </p>
-              </div>
-
-              {/* Activation Note */}
-              <div>
-                <Label htmlFor="activation_note">Nota de Activación (opcional)</Label>
-                <Textarea
-                  id="activation_note"
-                  placeholder="Ej: Pago recibido vía transferencia, recibo #12345, corrección de error en Stripe..."
-                  value={activationNote}
-                  onChange={(e) => setActivationNote(e.target.value)}
-                  rows={3}
-                  className="mt-1"
-                />
-                <p className="text-xs text-muted-foreground mt-1">
-                  Esta nota quedará registrada para auditoría interna
-                </p>
-              </div>
-
-              <div className="flex justify-end gap-2 pt-2">
-                <Button variant="outline" onClick={() => {
-                  setManualActivateDialogOpen(false);
-                  setActivationNote("");
-                  setDurationValue("30");
-                  setDurationUnit("days");
-                }}>
-                  Cancelar
-                </Button>
-                <Button onClick={handleManualActivate} disabled={updateSubscription.isPending || !durationValue || parseInt(durationValue) <= 0}>
-                  {updateSubscription.isPending ? (
-                    <>
-                      <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                      Activando...
-                    </>
-                  ) : (
-                    <>
-                      <Check className="mr-2 h-4 w-4" />
-                      Activar Suscripción
-                    </>
-                  )}
-                </Button>
-              </div>
-            </div>
-          )}
-        </DialogContent>
-      </Dialog>
+      <ManualActivationDialog
+        open={manualActivateDialogOpen}
+        onOpenChange={setManualActivateDialogOpen}
+        subscription={selectedSubscription}
+        onActivate={handleManualActivate}
+        isPending={updateSubscription.isPending}
+      />
     </AdminLayout>
   );
 };
