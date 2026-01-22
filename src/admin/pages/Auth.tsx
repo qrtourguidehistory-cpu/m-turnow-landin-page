@@ -31,10 +31,11 @@ export default function Auth() {
   const [isSendingToken, setIsSendingToken] = useState(false);
 
   useEffect(() => {
-    if (user && isAdmin && !isLoading) {
-      navigate("/admin", { replace: true });
+    // Si hay usuario, redirigir inmediatamente (sin esperar isAdmin)
+    if (user && !isLoading) {
+      navigate("/", { replace: true });
     }
-  }, [user, isAdmin, isLoading, navigate]);
+  }, [user, isLoading, navigate]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();

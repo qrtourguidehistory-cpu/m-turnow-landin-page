@@ -164,205 +164,90 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     let mounted = true;
     let subscription: { unsubscribe: () => void } | null = null;
-    let timeoutId: NodeJS.Timeout | null = null;
-    let loadingResolved = false;
-    let adminCheckInProgress = false;
 
-    // Timeout de seguridad: si después de 60 segundos no se ha resuelto, forzar loading a false
-    // Aumentado para dar tiempo a que la verificación de admin se complete
-    timeoutId = setTimeout(() => {
-      if (mounted && !loadingResolved) {
-        // Si hay una verificación de admin en progreso, dar más tiempo
-        if (adminCheckInProgress) {
-          console.warn('Auth initialization timeout but admin check in progress, extending timeout...');
-          // No forzar aún, esperar un poco más
-          return;
-        }
-        console.warn('Auth initialization timeout - forcing loading to false');
-        setIsLoading(false);
-        loadingResolved = true;
-      }
-    }, 60000);
-
-    // Función para actualizar el estado de admin
-    const updateAdminStatus = async (userId: string | undefined) => {
-      if (!mounted || loadingResolved) return;
+    // Verificar sesión existente
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      if (!mounted) return;
       
-      console.log('updateAdminStatus called with userId:', userId);
-      console.log('Current state - mounted:', mounted, 'loadingResolved:', loadingResolved);
+      setSession(session);
+      setUser(session?.user ?? null);
       
-      try {
-        if (userId) {
-          adminCheckInProgress = true;
-          console.log('Starting admin role check for userId:', userId);
-          
-          const adminStatus = await checkAdminRole(userId);
-          
-          adminCheckInProgress = false;
-          console.log('Admin status result from checkAdminRole:', adminStatus);
-          console.log('About to update state - mounted:', mounted, 'loadingResolved:', loadingResolved);
-          
-          if (mounted && !loadingResolved) {
-            console.log('Setting isAdmin to:', adminStatus, 'and isLoading to false');
-            setIsAdmin(adminStatus);
-            setIsLoading(false);
-            loadingResolved = true;
-            if (timeoutId) clearTimeout(timeoutId);
-          } else {
-            console.warn('State update skipped - mounted:', mounted, 'loadingResolved:', loadingResolved);
-          }
-        } else {
-          console.log('No userId provided, setting isAdmin to false');
-          if (mounted && !loadingResolved) {
-            setIsAdmin(false);
-            setIsLoading(false);
-            loadingResolved = true;
-            if (timeoutId) clearTimeout(timeoutId);
-          }
-        }
-      } catch (error) {
-        adminCheckInProgress = false;
-        console.error('Error checking admin role in updateAdminStatus:', error);
-        console.error('Error details:', {
-          message: error instanceof Error ? error.message : 'Unknown error',
-          stack: error instanceof Error ? error.stack : undefined
-        });
-        if (mounted && !loadingResolved) {
-          setIsAdmin(false);
+      // Si hay sesión, verificar admin de forma simple
+      if (session?.user) {
+        // Verificación rápida para el super admin
+        if (session.user.email === 'jordandn15@outlook.com') {
+          setIsAdmin(true);
           setIsLoading(false);
-          loadingResolved = true;
-          if (timeoutId) clearTimeout(timeoutId);
-        }
-      }
-    };
-
-    // Verificar sesión existente primero
-    const initializeAuth = async () => {
-      try {
-        const { data: { session }, error } = await supabase.auth.getSession();
-        
-        if (error) {
-          console.error('Error getting session:', error);
-          if (mounted && !loadingResolved) {
-            setSession(null);
-            setUser(null);
-            setIsAdmin(false);
-            setIsLoading(false);
-            loadingResolved = true;
-            if (timeoutId) clearTimeout(timeoutId);
-          }
           return;
         }
-
-        // Verificar si estamos en una ruta de admin (cualquier ruta excepto /auth)
-        const isAdminRoute = !window.location.pathname.startsWith('/auth');
         
-        // Solo verificar timeout si hay valores en localStorage (sesión activa previa)
-        if (isAdminRoute && session) {
-          const lastActivity = localStorage.getItem('admin_last_activity');
-          const sessionActive = localStorage.getItem('admin_session_active');
-          
-          // Solo verificar timeout si hay registro previo de actividad
-          if (lastActivity && sessionActive === 'true') {
-            const timeSinceLastActivity = Date.now() - parseInt(lastActivity, 10);
-            
-            // Si pasaron más de 10 minutos, cerrar sesión
-            if (timeSinceLastActivity >= 10 * 60 * 1000) {
-              console.log('Session expired due to inactivity');
-              await supabase.auth.signOut();
-              localStorage.removeItem('admin_session_active');
-              localStorage.removeItem('admin_last_activity');
-              if (mounted && !loadingResolved) {
-                setSession(null);
-                setUser(null);
-                setIsAdmin(false);
-                setIsLoading(false);
-                loadingResolved = true;
-                if (timeoutId) clearTimeout(timeoutId);
-              }
-              return;
-            } else {
-              // Sesión válida, actualizar actividad
-              localStorage.setItem('admin_last_activity', Date.now().toString());
+        // Para otros usuarios, verificar en BD (sin reintentos complejos)
+        supabase
+          .from('user_roles')
+          .select('role')
+          .eq('user_id', session.user.id)
+          .eq('role', 'admin')
+          .maybeSingle()
+          .then(({ data }) => {
+            if (mounted) {
+              setIsAdmin(data !== null);
+              setIsLoading(false);
             }
-          } else {
-            // Primera vez accediendo o sin registro previo - inicializar actividad
-            localStorage.setItem('admin_last_activity', Date.now().toString());
-            localStorage.setItem('admin_session_active', 'true');
-          }
-        }
-
-        if (mounted) {
-          console.log('Initial session check:', session ? 'exists' : 'null', 'User ID:', session?.user?.id);
-          setSession(session);
-          setUser(session?.user ?? null);
-          
-          // Solo actualizar estado de admin si hay una sesión con usuario
-          if (session?.user?.id) {
-            await updateAdminStatus(session.user.id);
-          } else {
-            // No hay sesión, establecer estados por defecto
-            if (!loadingResolved) {
+          })
+          .catch(() => {
+            if (mounted) {
               setIsAdmin(false);
               setIsLoading(false);
-              loadingResolved = true;
-              if (timeoutId) clearTimeout(timeoutId);
             }
-          }
-        }
-      } catch (error) {
-        console.error('Error initializing auth:', error);
-        if (mounted && !loadingResolved) {
-          setSession(null);
-          setUser(null);
-          setIsAdmin(false);
-          setIsLoading(false);
-          loadingResolved = true;
-          if (timeoutId) clearTimeout(timeoutId);
-        }
+          });
+      } else {
+        setIsAdmin(false);
+        setIsLoading(false);
       }
-    };
+    });
 
-    // Configurar listener de cambios de autenticación
+    // Escuchar cambios de auth
     const { data: { subscription: authSubscription } } = supabase.auth.onAuthStateChange(
       async (event, session) => {
         if (!mounted) return;
         
-        console.log('Auth state changed:', event, 'Session:', session ? 'exists' : 'null', 'User ID:', session?.user?.id);
-        
         setSession(session);
         setUser(session?.user ?? null);
         
-        // Solo actualizar estado de admin si hay una sesión con usuario
-        if (session?.user?.id) {
-          await updateAdminStatus(session.user.id);
-        } else {
-          // No hay sesión, establecer estados por defecto
-          if (mounted && !loadingResolved) {
-            setIsAdmin(false);
+        if (session?.user) {
+          // Verificación rápida para el super admin
+          if (session.user.email === 'jordandn15@outlook.com') {
+            setIsAdmin(true);
             setIsLoading(false);
-            loadingResolved = true;
-            if (timeoutId) clearTimeout(timeoutId);
+            return;
           }
+          
+          // Para otros usuarios
+          const { data } = await supabase
+            .from('user_roles')
+            .select('role')
+            .eq('user_id', session.user.id)
+            .eq('role', 'admin')
+            .maybeSingle();
+          
+          setIsAdmin(data !== null);
+        } else {
+          setIsAdmin(false);
         }
+        setIsLoading(false);
       }
     );
 
     subscription = authSubscription;
-    initializeAuth();
 
     return () => {
       mounted = false;
       if (subscription) {
         subscription.unsubscribe();
       }
-      if (timeoutId) {
-        clearTimeout(timeoutId);
-      }
-      // Limpiar todas las referencias de checkAdminRole
       checkAdminRoleRef.current.clear();
     };
-  }, [checkAdminRole]);
+  }, []);
 
   const signIn = async (email: string, password: string) => {
     try {
@@ -379,28 +264,34 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       
       console.log('Sign in successful, user ID:', data.user?.id);
       
-      // Marcar actividad al iniciar sesión
-      const now = Date.now();
-      localStorage.setItem('admin_last_activity', now.toString());
-      localStorage.setItem('admin_session_active', 'true');
+      // Verificación rápida de admin - super admin directo
+      if (data.user?.email === 'jordandn15@outlook.com') {
+        setIsAdmin(true);
+        setUser(data.user);
+        setSession(data.session);
+        return { error: null };
+      }
       
-      // El onAuthStateChange se disparará automáticamente y actualizará el estado
-      // Pero también podemos actualizar manualmente aquí para asegurar sincronización
+      // Para otros usuarios, verificar en la base de datos (pero de forma simple)
       if (data.user?.id) {
         try {
-          const adminStatus = await checkAdminRole(data.user.id);
-          console.log('Admin status after login:', adminStatus);
-          setIsAdmin(adminStatus);
-          setUser(data.user);
-          setSession(data.session);
-        } catch (err: any) {
-          // Si hay un error al verificar el rol, no fallar el login
-          console.warn('Error checking admin role after login (non-fatal):', err);
-          setUser(data.user);
-          setSession(data.session);
-          // El onAuthStateChange también intentará verificar el rol
+          const { data: roleData } = await supabase
+            .from('user_roles')
+            .select('role')
+            .eq('user_id', data.user.id)
+            .eq('role', 'admin')
+            .maybeSingle();
+          
+          setIsAdmin(roleData !== null);
+        } catch (err) {
+          // Si falla la verificación, asumir que no es admin
+          console.warn('Error checking admin role after login:', err);
+          setIsAdmin(false);
         }
       }
+      
+      setUser(data.user);
+      setSession(data.session);
       
       return { error: null };
     } catch (err) {
