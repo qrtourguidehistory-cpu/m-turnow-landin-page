@@ -21,34 +21,72 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [isLoading, setIsLoading] = useState(true);
   const checkAdminRoleRef = useRef<Map<string, Promise<boolean>>>(new Map());
 
-  const checkAdminRole = useCallback(async (userId: string) => {
-    // Evitar múltiples llamadas simultáneas para el mismo usuario
-    if (checkAdminRoleRef.current.has(userId)) {
+  const checkAdminRole = useCallback(async (userId: string, retryCount = 0): Promise<boolean> => {
+    const MAX_RETRIES = 3;
+    
+    // Evitar múltiples llamadas simultáneas para el mismo usuario (solo en el primer intento)
+    if (retryCount === 0 && checkAdminRoleRef.current.has(userId)) {
       console.log('Admin role check already in progress for user:', userId);
-      return await checkAdminRoleRef.current.get(userId)!;
+      try {
+        return await checkAdminRoleRef.current.get(userId)!;
+      } catch {
+        // Si la promesa anterior falló, continuar con nuevo intento
+      }
     }
 
-    const checkPromise = (async () => {
+    const checkPromise = (async (): Promise<boolean> => {
       try {
-        console.log('Checking admin role for user:', userId);
+        console.log(`Checking admin role for user: ${userId} (attempt ${retryCount + 1})`);
         
         // Query user_roles table directly to check for admin role
-        const { data, error } = await supabase
+        // Usar una consulta más simple y directa para evitar cancelaciones
+        const query = supabase
           .from('user_roles')
           .select('role')
           .eq('user_id', userId)
           .eq('role', 'admin')
           .maybeSingle();
         
-        // Limpiar la referencia después de completar
-        checkAdminRoleRef.current.delete(userId);
+        const { data, error } = await query;
+        
+        // Limpiar la referencia después de completar (solo en el primer intento)
+        if (retryCount === 0) {
+          checkAdminRoleRef.current.delete(userId);
+        }
         
         if (error) {
-          // Si el error es un AbortError, ignorarlo silenciosamente
+          // Si el error es un AbortError, reintentar hasta MAX_RETRIES veces
           if (error.message?.includes('abort') || error.message?.includes('AbortError') || 
               error.code === 'PGRST301' || error.code === 'PGRST116') {
-            console.warn('Admin role check was aborted or cancelled:', error.message || error);
-            return false;
+            console.warn(`Admin role check was aborted (attempt ${retryCount + 1}/${MAX_RETRIES}):`, error.message || error);
+            
+            // Reintentar si no hemos alcanzado el máximo
+            if (retryCount < MAX_RETRIES) {
+              // Esperar un poco antes de reintentar (backoff exponencial)
+              await new Promise(resolve => setTimeout(resolve, Math.pow(2, retryCount) * 500));
+              return checkAdminRole(userId, retryCount + 1);
+            }
+            
+            // Si se agotaron los reintentos, hacer una última consulta directa sin caché
+            console.warn('Max retries reached, attempting final direct query');
+            try {
+              const { data: finalData, error: finalError } = await supabase
+                .from('user_roles')
+                .select('role')
+                .eq('user_id', userId)
+                .eq('role', 'admin')
+                .maybeSingle();
+              
+              if (finalError) {
+                console.error('Final admin role check failed:', finalError);
+                return false;
+              }
+              
+              return finalData !== null;
+            } catch (finalErr: any) {
+              console.error('Final admin role check exception:', finalErr);
+              return false;
+            }
           }
           console.error('Error checking admin role:', error);
           return false;
@@ -58,21 +96,45 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         console.log('Admin role check result:', isAdmin, data);
         return isAdmin;
       } catch (err: any) {
-        // Limpiar la referencia en caso de error
-        checkAdminRoleRef.current.delete(userId);
-        
-        // Ignorar errores de aborto
-        if (err?.name === 'AbortError' || err?.message?.includes('abort')) {
-          console.warn('Admin role check was aborted:', err.message);
-          return false;
+        // Limpiar la referencia en caso de error (solo en el primer intento)
+        if (retryCount === 0) {
+          checkAdminRoleRef.current.delete(userId);
         }
+        
+        // Si es un AbortError, reintentar
+        if (err?.name === 'AbortError' || err?.message?.includes('abort')) {
+          console.warn(`Admin role check was aborted (attempt ${retryCount + 1}/${MAX_RETRIES}):`, err.message);
+          
+          if (retryCount < MAX_RETRIES) {
+            await new Promise(resolve => setTimeout(resolve, Math.pow(2, retryCount) * 500));
+            return checkAdminRole(userId, retryCount + 1);
+          }
+          
+          // Último intento directo
+          try {
+            const { data: finalData } = await supabase
+              .from('user_roles')
+              .select('role')
+              .eq('user_id', userId)
+              .eq('role', 'admin')
+              .maybeSingle();
+            
+            return finalData !== null;
+          } catch {
+            return false;
+          }
+        }
+        
         console.error('Error in checkAdminRole:', err);
         return false;
       }
     })();
 
-    // Guardar la promesa en el mapa
-    checkAdminRoleRef.current.set(userId, checkPromise);
+    // Guardar la promesa en el mapa solo en el primer intento
+    if (retryCount === 0) {
+      checkAdminRoleRef.current.set(userId, checkPromise);
+    }
+    
     return await checkPromise;
   }, []);
 
