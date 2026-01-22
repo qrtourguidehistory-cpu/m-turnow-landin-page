@@ -30,7 +30,8 @@ import { ScrollArea } from "../components/ui/scroll-area";
 import { ManualActivationDialog } from "../components/subscriptions/ManualActivationDialog";
 import { useSubscriptionByBusinessId, useUpdateSubscription } from "../hooks/useSubscriptions";
 import { supabase } from "../integrations/supabase/client";
-import { Search, MoreHorizontal, Eye, Check, Ban, Loader2, Building2, Star, Filter, CreditCard } from "lucide-react";
+import { BanDialog } from "../components/BanDialog";
+import { Search, MoreHorizontal, Eye, Check, Ban, Loader2, Building2, Star, Filter, CreditCard, ShieldX, ShieldCheck } from "lucide-react";
 import { cn } from "../lib/utils";
 import { toast } from "sonner";
 import { format } from "date-fns";
@@ -39,6 +40,7 @@ const statusConfig = {
   active: { label: "Activo", className: "bg-success/10 text-success" },
   pending: { label: "Pendiente", className: "bg-warning/10 text-warning" },
   suspended: { label: "Suspendido", className: "bg-destructive/10 text-destructive" },
+  banned: { label: "Baneado", className: "bg-destructive/20 text-destructive border border-destructive/50" },
 };
 
 const COUNTRIES = [
@@ -83,6 +85,8 @@ const Establishments = () => {
   const [detailsOpen, setDetailsOpen] = useState(false);
   const [subscriptionDialogOpen, setSubscriptionDialogOpen] = useState(false);
   const [businessForSubscription, setBusinessForSubscription] = useState<Business | null>(null);
+  const [banDialogOpen, setBanDialogOpen] = useState(false);
+  const [businessForBan, setBusinessForBan] = useState<Business | null>(null);
   
   const { data: businesses, isLoading, refetch } = useBusinesses({
     status: statusFilter as any,
@@ -95,6 +99,7 @@ const Establishments = () => {
   const { data: subscriptionData } = useSubscriptionByBusinessId(businessForSubscription?.id || null);
 
   const getStatus = (biz: Business) => {
+    if ((biz as any).is_banned) return "banned";
     if (!biz.is_active) return "suspended";
     if (biz.approval_status === "pending") return "pending";
     if (biz.approval_status === "approved") return "active";
@@ -235,14 +240,15 @@ const Establishments = () => {
   });
 
   const allBusinesses = businesses || [];
-  const activeCount = allBusinesses.filter(b => b.is_active && b.approval_status === "approved").length;
-  const pendingCount = allBusinesses.filter(b => b.approval_status === "pending").length;
-  const suspendedCount = allBusinesses.filter(b => !b.is_active).length;
+  const activeCount = allBusinesses.filter(b => b.is_active && b.approval_status === "approved" && !(b as any).is_banned).length;
+  const pendingCount = allBusinesses.filter(b => b.approval_status === "pending" && !(b as any).is_banned).length;
+  const suspendedCount = allBusinesses.filter(b => !b.is_active && !(b as any).is_banned).length;
+  const bannedCount = allBusinesses.filter(b => (b as any).is_banned).length;
 
   return (
     <AdminLayout title="Establecimientos" description="Gestiona todos los negocios de la plataforma">
       {/* Stats */}
-      <div className="grid grid-cols-3 gap-4">
+      <div className="grid grid-cols-4 gap-4">
         <div className="metric-card">
           <span className="text-sm text-muted-foreground">Activos</span>
           <p className="text-2xl font-semibold text-foreground mt-1">{activeCount}</p>
@@ -254,6 +260,10 @@ const Establishments = () => {
         <div className="metric-card">
           <span className="text-sm text-muted-foreground">Suspendidos</span>
           <p className="text-2xl font-semibold text-destructive mt-1">{suspendedCount}</p>
+        </div>
+        <div className="metric-card">
+          <span className="text-sm text-muted-foreground">Baneados</span>
+          <p className="text-2xl font-semibold text-destructive mt-1">{bannedCount}</p>
         </div>
       </div>
 
@@ -278,6 +288,7 @@ const Establishments = () => {
               <SelectItem value="active">Activos</SelectItem>
               <SelectItem value="pending">Pendientes</SelectItem>
               <SelectItem value="suspended">Suspendidos</SelectItem>
+              <SelectItem value="banned">Baneados</SelectItem>
             </SelectContent>
           </Select>
         </div>
@@ -415,13 +426,23 @@ const Establishments = () => {
                               </DropdownMenuItem>
                             )}
                             {status === "active" && (
-                              <DropdownMenuItem onClick={() => handleAction(biz.id, "suspend", biz.business_name || "")} className="text-destructive">
+                              <DropdownMenuItem onClick={() => handleAction(biz.id, "suspend", biz.business_name || "")} className="text-warning">
                                 <Ban className="h-4 w-4 mr-2" /> Suspender
                               </DropdownMenuItem>
                             )}
                             {status === "suspended" && (
                               <DropdownMenuItem onClick={() => handleAction(biz.id, "activate", biz.business_name || "")}>
                                 <Check className="h-4 w-4 mr-2 text-success" /> Reactivar
+                              </DropdownMenuItem>
+                            )}
+                            <DropdownMenuSeparator />
+                            {(biz as any).is_banned ? (
+                              <DropdownMenuItem onClick={() => handleBanClick(biz)} className="text-success">
+                                <ShieldCheck className="h-4 w-4 mr-2" /> Desbanear
+                              </DropdownMenuItem>
+                            ) : (
+                              <DropdownMenuItem onClick={() => handleBanClick(biz)} className="text-destructive">
+                                <ShieldX className="h-4 w-4 mr-2" /> Banear permanentemente
                               </DropdownMenuItem>
                             )}
                           </DropdownMenuContent>
@@ -460,6 +481,17 @@ const Establishments = () => {
         businessName={businessForSubscription?.business_name}
         onActivate={handleManualActivate}
         isPending={updateSubscription.isPending}
+      />
+
+      {/* Ban Dialog */}
+      <BanDialog
+        open={banDialogOpen}
+        onOpenChange={setBanDialogOpen}
+        entityName={businessForBan?.business_name || "Establecimiento"}
+        entityType="business"
+        isBanned={(businessForBan as any)?.is_banned || false}
+        onConfirm={handleBanConfirm}
+        isPending={updateBusiness.isPending}
       />
     </AdminLayout>
   );

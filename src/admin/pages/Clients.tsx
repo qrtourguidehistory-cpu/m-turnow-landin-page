@@ -38,17 +38,19 @@ import {
 } from "../components/ui/alert-dialog";
 import { Avatar, AvatarFallback } from "../components/ui/avatar";
 import { ScrollArea } from "../components/ui/scroll-area";
-import { Search, MoreHorizontal, Eye, Ban, ShieldOff, Loader2, Pencil, Trash2, UserX } from "lucide-react";
+import { Search, MoreHorizontal, Eye, Ban, ShieldOff, Loader2, Pencil, Trash2, UserX, ShieldX, ShieldCheck } from "lucide-react";
 import { cn } from "../lib/utils";
 import { toast } from "sonner";
 import { format } from "date-fns";
 import { supabase } from "../integrations/supabase/client";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { BanDialog } from "../components/BanDialog";
 
 const statusConfig = {
   active: { label: "Activo", className: "bg-success/10 text-success" },
   blocked: { label: "Bloqueado", className: "bg-destructive/10 text-destructive" },
   inactive: { label: "Inactivo", className: "bg-muted text-muted-foreground" },
+  banned: { label: "Baneado", className: "bg-destructive/20 text-destructive border border-destructive/50" },
 };
 
 const Clients = () => {
@@ -59,6 +61,8 @@ const Clients = () => {
   const [editModalOpen, setEditModalOpen] = useState(false);
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [clientToDelete, setClientToDelete] = useState<Client | null>(null);
+  const [banDialogOpen, setBanDialogOpen] = useState(false);
+  const [clientForBan, setClientForBan] = useState<Client | null>(null);
   
   const queryClient = useQueryClient();
   
@@ -90,6 +94,7 @@ const Clients = () => {
   });
 
   const getStatus = (client: Client) => {
+    if ((client as any).is_banned) return "banned";
     if (client.is_blocked) return "blocked";
     if (!client.is_active) return "inactive";
     return "active";
@@ -153,16 +158,101 @@ const Clients = () => {
     }
   };
 
+  const handleBanClick = (client: Client) => {
+    setClientForBan(client);
+    setBanDialogOpen(true);
+  };
+
+  const handleBanConfirm = async (reason: string) => {
+    if (!clientForBan) return;
+
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) {
+      toast.error("Debes iniciar sesión para realizar esta acción");
+      return;
+    }
+
+    try {
+      const isBanned = (clientForBan as any).is_banned;
+      const clientName = clientForBan.full_name || `${clientForBan.first_name || ""} ${clientForBan.last_name || ""}`.trim() || "Cliente";
+
+      if (isBanned) {
+        // Desbanear - determinar en qué tabla está
+        if (clientForBan.source === 'client_app') {
+          // Está en client_profiles
+          const { error } = await supabase
+            .from("client_profiles")
+            .update({
+              is_banned: false,
+              banned_at: null,
+              banned_reason: null,
+              banned_by: null,
+            })
+            .eq("id", clientForBan.id);
+          if (error) throw error;
+        } else {
+          // Está en clients
+          await updateClient.mutateAsync({
+            id: clientForBan.id,
+            updates: {
+              is_banned: false,
+              banned_at: null,
+              banned_reason: null,
+              banned_by: null,
+            },
+          });
+        }
+        toast.success(`${clientName} ha sido desbaneado`);
+      } else {
+        // Banear - determinar en qué tabla está
+        if (clientForBan.source === 'client_app') {
+          // Está en client_profiles
+          const { error } = await supabase
+            .from("client_profiles")
+            .update({
+              is_banned: true,
+              banned_at: new Date().toISOString(),
+              banned_reason: reason,
+              banned_by: user.id,
+            })
+            .eq("id", clientForBan.id);
+          if (error) throw error;
+        } else {
+          // Está en clients
+          await updateClient.mutateAsync({
+            id: clientForBan.id,
+            updates: {
+              is_banned: true,
+              banned_at: new Date().toISOString(),
+              banned_reason: reason,
+              banned_by: user.id,
+              is_active: false,
+              is_blocked: true,
+            },
+          });
+        }
+        toast.success(`${clientName} ha sido baneado permanentemente`);
+      }
+
+      setBanDialogOpen(false);
+      setClientForBan(null);
+      queryClient.invalidateQueries({ queryKey: ["clients"] });
+    } catch (error: any) {
+      toast.error(`Error: ${error?.message || "No se pudo realizar la acción."}`);
+    }
+  };
+
   const clientAppUsers = filteredClients.filter(c => c.source === 'client_app');
   const partnerUsers = filteredClients.filter(c => c.source === 'partner');
-  const activeCount = filteredClients.filter(c => c.is_active && !c.is_blocked).length || 0;
-  const blockedCount = filteredClients.filter(c => c.is_blocked).length || 0;
-  const inactiveCount = filteredClients.filter(c => !c.is_active && !c.is_blocked).length || 0;
+  const activeCount = filteredClients.filter(c => c.is_active && !c.is_blocked && !(c as any).is_banned).length || 0;
+  const blockedCount = filteredClients.filter(c => c.is_blocked && !(c as any).is_banned).length || 0;
+  const inactiveCount = filteredClients.filter(c => !c.is_active && !c.is_blocked && !(c as any).is_banned).length || 0;
+  const bannedCount = filteredClients.filter(c => (c as any).is_banned).length || 0;
 
   return (
     <AdminLayout title="Clientes" description="Gestiona todos los usuarios registrados en la plataforma">
       {/* Stats */}
-      <div className="grid grid-cols-6 gap-4">
+      <div className="grid grid-cols-7 gap-4">
         <div className="metric-card">
           <span className="text-sm text-muted-foreground">Total</span>
           <p className="text-2xl font-semibold text-foreground mt-1">{filteredClients.length}</p>
@@ -186,6 +276,10 @@ const Clients = () => {
         <div className="metric-card">
           <span className="text-sm text-muted-foreground">Suspendidos</span>
           <p className="text-2xl font-semibold text-warning mt-1">{inactiveCount}</p>
+        </div>
+        <div className="metric-card">
+          <span className="text-sm text-muted-foreground">Baneados</span>
+          <p className="text-2xl font-semibold text-destructive mt-1">{bannedCount}</p>
         </div>
       </div>
 
@@ -219,6 +313,7 @@ const Clients = () => {
             <SelectItem value="active">Activos</SelectItem>
             <SelectItem value="blocked">Bloqueados</SelectItem>
             <SelectItem value="suspended">Suspendidos</SelectItem>
+            <SelectItem value="banned">Baneados</SelectItem>
           </SelectContent>
         </Select>
       </div>
@@ -329,6 +424,16 @@ const Clients = () => {
                               </DropdownMenuItem>
                             )}
                             <DropdownMenuSeparator />
+                            {(client as any).is_banned ? (
+                              <DropdownMenuItem onClick={() => handleBanClick(client)} className="text-success">
+                                <ShieldCheck className="h-4 w-4 mr-2" /> Desbanear
+                              </DropdownMenuItem>
+                            ) : (
+                              <DropdownMenuItem onClick={() => handleBanClick(client)} className="text-destructive">
+                                <ShieldX className="h-4 w-4 mr-2" /> Banear permanentemente
+                              </DropdownMenuItem>
+                            )}
+                            <DropdownMenuSeparator />
                             <DropdownMenuItem onClick={() => handleDeleteClick(client)} className="text-destructive">
                               <Trash2 className="h-4 w-4 mr-2" /> Eliminar
                             </DropdownMenuItem>
@@ -371,6 +476,17 @@ const Clients = () => {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+
+      {/* Ban Dialog */}
+      <BanDialog
+        open={banDialogOpen}
+        onOpenChange={setBanDialogOpen}
+        entityName={clientForBan?.full_name || `${clientForBan?.first_name || ""} ${clientForBan?.last_name || ""}`.trim() || "Usuario"}
+        entityType="client"
+        isBanned={(clientForBan as any)?.is_banned || false}
+        onConfirm={handleBanConfirm}
+        isPending={updateClient.isPending}
+      />
     </AdminLayout>
   );
 };

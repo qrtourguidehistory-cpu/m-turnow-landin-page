@@ -17,6 +17,10 @@ export interface Client {
   created_at: string | null;
   business_id: string | null;
   source?: 'partner' | 'client_app';
+  is_banned?: boolean;
+  banned_at?: string | null;
+  banned_reason?: string | null;
+  banned_by?: string | null;
 }
 
 export interface ClientFilters {
@@ -59,6 +63,10 @@ export function useClients(filters: ClientFilters = {}) {
         .select("*")
         .order("created_at", { ascending: false });
 
+      if (filters.status === "banned") {
+        profilesQuery = profilesQuery.eq("is_banned", true);
+      }
+
       if (filters.search) {
         profilesQuery = profilesQuery.or(`full_name.ilike.%${filters.search}%,email.ilike.%${filters.search}%,phone.ilike.%${filters.search}%`);
       }
@@ -70,7 +78,7 @@ export function useClients(filters: ClientFilters = {}) {
         // Don't throw - continue with just clients data
       }
 
-      // Map clients from clients table
+      // Map clients from clients table (Client app users - usuarios que reservan en establecimientos)
       const clients: Client[] = (clientsData || []).map(c => ({
         id: c.id,
         first_name: c.first_name,
@@ -86,10 +94,14 @@ export function useClients(filters: ClientFilters = {}) {
         total_spent: c.total_spent ?? 0,
         created_at: c.created_at,
         business_id: c.business_id,
-        source: 'partner' as const,
+        source: 'client_app' as const, // Usuarios de la app Cliente (usuarios que reservan)
+        is_banned: (c as any).is_banned ?? false,
+        banned_at: (c as any).banned_at,
+        banned_reason: (c as any).banned_reason,
+        banned_by: (c as any).banned_by,
       }));
 
-      // Map client_profiles to Client interface (Client app users)
+      // Map client_profiles to Client interface (Partner app users - dueños de establecimientos)
       const profileClients: Client[] = (profilesData || []).map(p => ({
         id: p.id,
         first_name: p.first_name,
@@ -105,7 +117,11 @@ export function useClients(filters: ClientFilters = {}) {
         total_spent: 0,
         created_at: p.created_at,
         business_id: null,
-        source: 'client_app' as const,
+        source: 'partner' as const, // Usuarios de la app Partner (dueños de establecimientos)
+        is_banned: (p as any).is_banned ?? false,
+        banned_at: (p as any).banned_at,
+        banned_reason: (p as any).banned_reason,
+        banned_by: (p as any).banned_by,
       }));
 
       // Combine and deduplicate by email

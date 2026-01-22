@@ -110,9 +110,70 @@ const Subscriptions = () => {
         id: subscription.id,
         updates: { status: "suspended" },
       });
+      
+      // También actualizar el negocio para que no sea público
+      const { error: businessError } = await supabase
+        .from("businesses")
+        .update({ is_public: false, is_active: false })
+        .eq("id", subscription.business_id);
+
+      if (businessError) {
+        console.error("Error updating business:", businessError);
+      }
+
       toast.success("Suscripción suspendida");
     } catch (err: any) {
       toast.error("Error al suspender la suscripción");
+    }
+  };
+
+  const handleReactivate = async (subscription: BusinessSubscription) => {
+    try {
+      await updateSubscription.mutateAsync({
+        id: subscription.id,
+        updates: { status: "active" },
+      });
+      
+      // También actualizar el negocio para que sea público y activo
+      const { error: businessError } = await supabase
+        .from("businesses")
+        .update({ is_public: true, is_active: true })
+        .eq("id", subscription.business_id);
+
+      if (businessError) {
+        console.error("Error updating business:", businessError);
+      }
+
+      toast.success("Suscripción reactivada");
+    } catch (err: any) {
+      toast.error("Error al reactivar la suscripción");
+    }
+  };
+
+  const handleCancelSubscription = async (subscription: BusinessSubscription) => {
+    if (!confirm(`¿Estás seguro de cancelar la suscripción de ${subscription.business_name || "este negocio"}? Esta acción no se puede deshacer.`)) {
+      return;
+    }
+
+    try {
+      await updateSubscription.mutateAsync({
+        id: subscription.id,
+        updates: { status: "cancelled" },
+      });
+      
+      // También actualizar el negocio para que no sea público
+      const { error: businessError } = await supabase
+        .from("businesses")
+        .update({ is_public: false, is_active: false })
+        .eq("id", subscription.business_id);
+
+      if (businessError) {
+        console.error("Error updating business:", businessError);
+      }
+
+      toast.success("Suscripción cancelada");
+    } catch (err: any) {
+      toast.error("Error al cancelar la suscripción");
     }
   };
 
@@ -256,11 +317,26 @@ const Subscriptions = () => {
                           >
                             <Check className="h-4 w-4 mr-2" /> Activar manualmente
                           </DropdownMenuItem>
+                          {subscription.status === "suspended" && (
+                            <DropdownMenuItem 
+                              onClick={() => handleReactivate(subscription)} 
+                              className="text-success"
+                            >
+                              <Check className="h-4 w-4 mr-2" /> Reactivar
+                            </DropdownMenuItem>
+                          )}
                           {subscription.status !== "suspended" && (
                             <DropdownMenuItem onClick={() => handleSuspend(subscription)} className="text-warning">
                               <AlertTriangle className="h-4 w-4 mr-2" /> Suspender
                             </DropdownMenuItem>
                           )}
+                          <DropdownMenuSeparator />
+                          <DropdownMenuItem 
+                            onClick={() => handleCancelSubscription(subscription)} 
+                            className="text-destructive"
+                          >
+                            <AlertTriangle className="h-4 w-4 mr-2" /> Cancelar suscripción
+                          </DropdownMenuItem>
                         </DropdownMenuContent>
                       </DropdownMenu>
                     </TableCell>

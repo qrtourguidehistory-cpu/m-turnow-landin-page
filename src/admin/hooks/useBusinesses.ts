@@ -20,6 +20,10 @@ export interface Business {
   description: string | null;
   cover_image_url: string | null;
   logo_url: string | null;
+  is_banned?: boolean;
+  banned_at?: string | null;
+  banned_reason?: string | null;
+  banned_by?: string | null;
 }
 
 export interface ApprovalRequest {
@@ -52,11 +56,13 @@ export function useBusinesses(filters: BusinessFilters = {}) {
 
       // Apply filters - now using approval_status
       if (filters.status === "active") {
-        query = query.eq("is_active", true).eq("approval_status", "approved");
+        query = query.eq("is_active", true).eq("approval_status", "approved").eq("is_banned", false);
       } else if (filters.status === "pending") {
-        query = query.eq("approval_status", "pending");
+        query = query.eq("approval_status", "pending").eq("is_banned", false);
       } else if (filters.status === "suspended") {
-        query = query.eq("is_active", false);
+        query = query.eq("is_active", false).eq("is_banned", false);
+      } else if (filters.status === "banned") {
+        query = query.eq("is_banned", true);
       }
 
       if (filters.category) {
