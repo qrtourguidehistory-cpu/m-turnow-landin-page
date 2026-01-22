@@ -22,6 +22,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const checkAdminRole = async (userId: string) => {
     try {
+      console.log('Checking admin role for user:', userId);
       // Query user_roles table directly to check for admin role
       const { data, error } = await supabase
         .from('user_roles')
@@ -35,7 +36,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         return false;
       }
       
-      return data !== null;
+      const isAdmin = data !== null;
+      console.log('Admin role check result:', isAdmin, data);
+      return isAdmin;
     } catch (err) {
       console.error('Error in checkAdminRole:', err);
       return false;
@@ -61,9 +64,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     const updateAdminStatus = async (userId: string | undefined) => {
       if (!mounted || loadingResolved) return;
       
+      console.log('updateAdminStatus called with userId:', userId);
+      
       try {
         if (userId) {
           const adminStatus = await checkAdminRole(userId);
+          console.log('Admin status result:', adminStatus);
           if (mounted && !loadingResolved) {
             setIsAdmin(adminStatus);
             setIsLoading(false);
@@ -71,6 +77,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             if (timeoutId) clearTimeout(timeoutId);
           }
         } else {
+          console.log('No userId provided, setting isAdmin to false');
           if (mounted && !loadingResolved) {
             setIsAdmin(false);
             setIsLoading(false);
@@ -110,15 +117,18 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         // Verificar si estamos en una ruta de admin (cualquier ruta excepto /auth)
         const isAdminRoute = !window.location.pathname.startsWith('/auth');
         
+        // Solo verificar timeout si hay valores en localStorage (sesión activa previa)
         if (isAdminRoute && session) {
           const lastActivity = localStorage.getItem('admin_last_activity');
           const sessionActive = localStorage.getItem('admin_session_active');
           
+          // Solo verificar timeout si hay registro previo de actividad
           if (lastActivity && sessionActive === 'true') {
             const timeSinceLastActivity = Date.now() - parseInt(lastActivity, 10);
             
             // Si pasaron más de 10 minutos, cerrar sesión
             if (timeSinceLastActivity >= 10 * 60 * 1000) {
+              console.log('Session expired due to inactivity');
               await supabase.auth.signOut();
               localStorage.removeItem('admin_session_active');
               localStorage.removeItem('admin_last_activity');
@@ -131,28 +141,34 @@ export function AuthProvider({ children }: { children: ReactNode }) {
                 if (timeoutId) clearTimeout(timeoutId);
               }
               return;
+            } else {
+              // Sesión válida, actualizar actividad
+              localStorage.setItem('admin_last_activity', Date.now().toString());
             }
-          } else if (!lastActivity || sessionActive !== 'true') {
-            // Si no hay registro de actividad, cerrar sesión por seguridad
-            await supabase.auth.signOut();
-            localStorage.removeItem('admin_session_active');
-            localStorage.removeItem('admin_last_activity');
-            if (mounted && !loadingResolved) {
-              setSession(null);
-              setUser(null);
+          } else {
+            // Primera vez accediendo o sin registro previo - inicializar actividad
+            localStorage.setItem('admin_last_activity', Date.now().toString());
+            localStorage.setItem('admin_session_active', 'true');
+          }
+        }
+
+        if (mounted) {
+          console.log('Initial session check:', session ? 'exists' : 'null', 'User ID:', session?.user?.id);
+          setSession(session);
+          setUser(session?.user ?? null);
+          
+          // Solo actualizar estado de admin si hay una sesión con usuario
+          if (session?.user?.id) {
+            await updateAdminStatus(session.user.id);
+          } else {
+            // No hay sesión, establecer estados por defecto
+            if (!loadingResolved) {
               setIsAdmin(false);
               setIsLoading(false);
               loadingResolved = true;
               if (timeoutId) clearTimeout(timeoutId);
             }
-            return;
           }
-        }
-
-        if (mounted) {
-          setSession(session);
-          setUser(session?.user ?? null);
-          await updateAdminStatus(session?.user?.id);
         }
       } catch (error) {
         console.error('Error initializing auth:', error);
@@ -172,9 +188,23 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       async (event, session) => {
         if (!mounted) return;
         
+        console.log('Auth state changed:', event, 'Session:', session ? 'exists' : 'null', 'User ID:', session?.user?.id);
+        
         setSession(session);
         setUser(session?.user ?? null);
-        await updateAdminStatus(session?.user?.id);
+        
+        // Solo actualizar estado de admin si hay una sesión con usuario
+        if (session?.user?.id) {
+          await updateAdminStatus(session.user.id);
+        } else {
+          // No hay sesión, establecer estados por defecto
+          if (mounted && !loadingResolved) {
+            setIsAdmin(false);
+            setIsLoading(false);
+            loadingResolved = true;
+            if (timeoutId) clearTimeout(timeoutId);
+          }
+        }
       }
     );
 
@@ -194,22 +224,37 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const signIn = async (email: string, password: string) => {
     try {
-      const { error } = await supabase.auth.signInWithPassword({
+      console.log('Attempting to sign in with email:', email);
+      const { data, error } = await supabase.auth.signInWithPassword({
         email,
         password,
       });
       
       if (error) {
+        console.error('Sign in error:', error);
         return { error: new Error(error.message) };
       }
+      
+      console.log('Sign in successful, user ID:', data.user?.id);
       
       // Marcar actividad al iniciar sesión
       const now = Date.now();
       localStorage.setItem('admin_last_activity', now.toString());
       localStorage.setItem('admin_session_active', 'true');
       
+      // El onAuthStateChange se disparará automáticamente y actualizará el estado
+      // Pero también podemos actualizar manualmente aquí para asegurar sincronización
+      if (data.user?.id) {
+        const adminStatus = await checkAdminRole(data.user.id);
+        console.log('Admin status after login:', adminStatus);
+        setIsAdmin(adminStatus);
+        setUser(data.user);
+        setSession(data.session);
+      }
+      
       return { error: null };
     } catch (err) {
+      console.error('Sign in exception:', err);
       return { error: err as Error };
     }
   };
