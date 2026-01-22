@@ -78,6 +78,17 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     let mounted = true;
     let subscription: { unsubscribe: () => void } | null = null;
+    let timeoutId: NodeJS.Timeout | null = null;
+    let loadingResolved = false;
+
+    // Timeout de seguridad: si después de 30 segundos no se ha resuelto, forzar loading a false
+    timeoutId = setTimeout(() => {
+      if (mounted && !loadingResolved) {
+        console.warn('Auth initialization timeout - forcing loading to false');
+        setIsLoading(false);
+        loadingResolved = true;
+      }
+    }, 30000);
 
     // Set up auth state listener FIRST
     const { data: { subscription: authSubscription } } = supabase.auth.onAuthStateChange(
@@ -93,21 +104,27 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         if (session?.user?.id) {
           try {
             const adminStatus = await checkAdminRole(session.user.id);
-            if (mounted) {
+            if (mounted && !loadingResolved) {
               setIsAdmin(adminStatus);
               setIsLoading(false);
+              loadingResolved = true;
+              if (timeoutId) clearTimeout(timeoutId);
             }
           } catch (err) {
             console.error('Error checking admin role in auth state change:', err);
-            if (mounted) {
+            if (mounted && !loadingResolved) {
               setIsAdmin(false);
               setIsLoading(false);
+              loadingResolved = true;
+              if (timeoutId) clearTimeout(timeoutId);
             }
           }
         } else {
-          if (mounted) {
+          if (mounted && !loadingResolved) {
             setIsAdmin(false);
             setIsLoading(false);
+            loadingResolved = true;
+            if (timeoutId) clearTimeout(timeoutId);
           }
         }
       }
@@ -124,20 +141,26 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       
       if (session?.user) {
         checkAdminRole(session.user.id).then((adminStatus) => {
-          if (mounted) {
+          if (mounted && !loadingResolved) {
             setIsAdmin(adminStatus);
             setIsLoading(false);
+            loadingResolved = true;
+            if (timeoutId) clearTimeout(timeoutId);
           }
         }).catch((err) => {
           console.error('Error checking admin role in getSession:', err);
-          if (mounted) {
+          if (mounted && !loadingResolved) {
             setIsAdmin(false);
             setIsLoading(false);
+            loadingResolved = true;
+            if (timeoutId) clearTimeout(timeoutId);
           }
         });
       } else {
-        if (mounted) {
+        if (mounted && !loadingResolved) {
           setIsLoading(false);
+          loadingResolved = true;
+          if (timeoutId) clearTimeout(timeoutId);
         }
       }
     });
@@ -146,6 +169,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       mounted = false;
       if (subscription) {
         subscription.unsubscribe();
+      }
+      if (timeoutId) {
+        clearTimeout(timeoutId);
       }
       // Limpiar todas las referencias de checkAdminRole
       checkAdminRoleRef.current.clear();

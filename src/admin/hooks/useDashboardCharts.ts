@@ -10,22 +10,34 @@ export function useDashboardCharts() {
       const sevenDaysAgo = subDays(today, 7);
 
       // Get appointments by day (last 7 days)
-      const { data: appointmentsByDay } = await supabase
+      const { data: appointmentsByDay, error: appointmentsError } = await supabase
         .from("appointments")
         .select("date, status")
         .gte("date", format(sevenDaysAgo, "yyyy-MM-dd"))
         .lte("date", format(today, "yyyy-MM-dd"));
 
+      if (appointmentsError) {
+        console.error("Error fetching appointments by day:", appointmentsError);
+      }
+
       // Get businesses by category
-      const { data: businessesByCategory } = await supabase
+      const { data: businessesByCategory, error: businessesError } = await supabase
         .from("businesses")
         .select("primary_category")
         .eq("is_active", true);
 
+      if (businessesError) {
+        console.error("Error fetching businesses by category:", businessesError);
+      }
+
       // Get appointment status distribution
-      const { data: appointmentStatus } = await supabase
+      const { data: appointmentStatus, error: statusError } = await supabase
         .from("appointments")
         .select("status");
+
+      if (statusError) {
+        console.error("Error fetching appointment status:", statusError);
+      }
 
       // Process appointments by day - return as array for charts
       const appointmentsByDayData = [];
@@ -66,38 +78,39 @@ export function useDashboardCharts() {
         count,
       }));
 
-      // Get device information from user sessions or client_profiles
-      // Assuming we have device info in client_profiles or a sessions table
-      const { data: deviceData } = await supabase
-        .from("client_profiles")
-        .select("device_type, platform")
-        .not("device_type", "is", null);
+      // Get device information from client_devices table instead
+      // client_profiles doesn't have device_type or platform columns
+      let devicesData = [
+        { device: "Android", count: 0 },
+        { device: "iOS", count: 0 },
+      ];
 
-      const deviceMap: Record<string, number> = {};
-      const platformMap: Record<string, number> = {};
-      
-      (deviceData || []).forEach((profile: any) => {
-        if (profile.device_type) {
-          const device = profile.device_type.toLowerCase();
-          deviceMap[device] = (deviceMap[device] || 0) + 1;
-        }
-        if (profile.platform) {
-          const platform = profile.platform.toLowerCase();
-          platformMap[platform] = (platformMap[platform] || 0) + 1;
-        }
-      });
+      try {
+        const { data: deviceData, error: deviceError } = await supabase
+          .from("client_devices")
+          .select("platform")
+          .not("platform", "is", null);
 
-      // Fallback: try to infer from user agents or other sources
-      // For now, we'll use a simple count based on available data
-      const devicesData = Object.entries(deviceMap).length > 0
-        ? Object.entries(deviceMap).map(([device, count]) => ({
-            device: device === "ios" ? "iOS" : device === "android" ? "Android" : device,
-            count,
-          }))
-        : [
-            { device: "Android", count: Math.floor((deviceData?.length || 0) * 0.6) },
-            { device: "iOS", count: Math.floor((deviceData?.length || 0) * 0.4) },
-          ];
+        if (!deviceError && deviceData) {
+          const platformMap: Record<string, number> = {};
+          deviceData.forEach((device: any) => {
+            if (device.platform) {
+              const platform = device.platform.toLowerCase();
+              platformMap[platform] = (platformMap[platform] || 0) + 1;
+            }
+          });
+
+          if (Object.keys(platformMap).length > 0) {
+            devicesData = Object.entries(platformMap).map(([platform, count]) => ({
+              device: platform === "ios" ? "iOS" : platform === "android" ? "Android" : platform.charAt(0).toUpperCase() + platform.slice(1),
+              count,
+            }));
+          }
+        }
+      } catch (err) {
+        console.warn("Error fetching device data, using fallback:", err);
+        // Use fallback data if query fails
+      }
 
       return {
         appointmentsByDay: appointmentsByDayData,
