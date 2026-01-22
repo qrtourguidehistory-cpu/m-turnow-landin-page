@@ -10,9 +10,9 @@ export function useSessionTimeout(onSignOut: () => Promise<void>) {
   const lastActivityRef = useRef<number>(Date.now());
   const isWindowVisibleRef = useRef<boolean>(!document.hidden);
 
-  // Verificar si estamos en una ruta de admin
-  const isAdminRoute = window.location.pathname.startsWith('/admin') && 
-                       !window.location.pathname.includes('/admin/auth');
+  // Verificar si estamos en una ruta de admin (sin el prefijo /admin en las rutas)
+  const isAdminRoute = window.location.pathname !== '/auth' && 
+                       window.location.pathname !== '/';
 
   const resetTimeout = useCallback(() => {
     if (timeoutRef.current) {

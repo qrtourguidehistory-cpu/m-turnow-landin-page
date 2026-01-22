@@ -182,6 +182,44 @@ export function useUpdateSubscription() {
         .single();
 
       if (error) throw error;
+
+      // Sincronizar el estado del negocio con el estado de la suscripción
+      // El trigger también lo hará, pero esto asegura sincronización inmediata en el admin
+      if (updateData.status) {
+        const businessUpdate: any = {};
+        
+        // Verificar si el negocio está baneado antes de actualizar
+        const { data: businessData } = await supabase
+          .from("businesses")
+          .select("is_banned")
+          .eq("id", data.business_id)
+          .single();
+
+        // Solo actualizar si no está baneado
+        if (!businessData?.is_banned) {
+          if (updateData.status === "active" || updateData.status === "trialing") {
+            businessUpdate.is_active = true;
+            businessUpdate.is_public = true;
+          } else if (updateData.status === "suspended" || updateData.status === "cancelled" || updateData.status === "past_due" || updateData.status === "inactive") {
+            businessUpdate.is_active = false;
+            businessUpdate.is_public = false;
+          }
+
+          // Actualizar el negocio si hay cambios
+          if (Object.keys(businessUpdate).length > 0) {
+            const { error: businessError } = await supabase
+              .from("businesses")
+              .update(businessUpdate)
+              .eq("id", data.business_id);
+
+            if (businessError) {
+              console.warn("Error syncing business status:", businessError);
+              // No lanzar error, el trigger lo hará automáticamente
+            }
+          }
+        }
+      }
+
       return data;
     },
     onSuccess: (data, variables) => {
@@ -190,8 +228,8 @@ export function useUpdateSubscription() {
       queryClient.invalidateQueries({ queryKey: ["businesses"] });
       queryClient.invalidateQueries({ queryKey: ["dashboard-stats"] });
       
-      // Si se canceló o suspendió, también invalidar para refrescar el estado
-      if (variables.updates.status === "cancelled" || variables.updates.status === "suspended") {
+      // Invalidar queries relacionadas para refrescar el estado
+      if (variables.updates.status) {
         queryClient.invalidateQueries({ queryKey: ["subscription", data?.business_id] });
       }
     },

@@ -20,7 +20,20 @@ import Settings from "./pages/Settings";
 import Subscriptions from "./pages/Subscriptions";
 import NotFound from "./pages/NotFound";
 
-const queryClient = new QueryClient();
+const queryClient = new QueryClient({
+  defaultOptions: {
+    queries: {
+      retry: 1,
+      refetchOnWindowFocus: false,
+      // Evitar errores de aborto silenciosamente
+      throwOnError: false,
+    },
+    mutations: {
+      retry: 1,
+      throwOnError: false,
+    },
+  },
+});
 
 const App = () => (
   <QueryClientProvider client={queryClient}>

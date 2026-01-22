@@ -43,77 +43,120 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   };
 
   useEffect(() => {
-    // Set up auth state listener FIRST
-    const { data: { subscription } } = supabase.auth.onAuthStateChange(
-      (event, session) => {
-        setSession(session);
-        setUser(session?.user ?? null);
-        
-        // Defer admin check with setTimeout to avoid deadlock
-        if (session?.user) {
-          setTimeout(async () => {
-            const adminStatus = await checkAdminRole(session.user.id);
+    let mounted = true;
+    let subscription: { unsubscribe: () => void } | null = null;
+
+    // Función para actualizar el estado de admin
+    const updateAdminStatus = async (userId: string | undefined) => {
+      if (!mounted) return;
+      
+      if (userId) {
+        try {
+          const adminStatus = await checkAdminRole(userId);
+          if (mounted) {
             setIsAdmin(adminStatus);
             setIsLoading(false);
-          }, 0);
-        } else {
+          }
+        } catch (error) {
+          console.error('Error checking admin role:', error);
+          if (mounted) {
+            setIsAdmin(false);
+            setIsLoading(false);
+          }
+        }
+      } else {
+        if (mounted) {
           setIsAdmin(false);
           setIsLoading(false);
         }
       }
-    );
+    };
 
-    // THEN check for existing session
-    supabase.auth.getSession().then(async ({ data: { session } }) => {
-      // Verificar si estamos en una ruta de admin y si la sesión debe cerrarse
-      const isAdminRoute = window.location.pathname.startsWith('/admin') && 
-                          !window.location.pathname.includes('/admin/auth');
-      
-      if (isAdminRoute && session) {
-        const lastActivity = localStorage.getItem('admin_last_activity');
-        const sessionActive = localStorage.getItem('admin_session_active');
+    // Verificar sesión existente primero
+    const initializeAuth = async () => {
+      try {
+        const { data: { session }, error } = await supabase.auth.getSession();
         
-        if (lastActivity && sessionActive === 'true') {
-          const timeSinceLastActivity = Date.now() - parseInt(lastActivity, 10);
+        if (error) {
+          console.error('Error getting session:', error);
+          if (mounted) {
+            setIsLoading(false);
+          }
+          return;
+        }
+
+        // Verificar si estamos en una ruta de admin (sin el prefijo /admin en las rutas)
+        const isAdminRoute = window.location.pathname !== '/auth' && 
+                            window.location.pathname !== '/';
+        
+        if (isAdminRoute && session) {
+          const lastActivity = localStorage.getItem('admin_last_activity');
+          const sessionActive = localStorage.getItem('admin_session_active');
           
-          // Si pasaron más de 10 minutos, cerrar sesión
-          if (timeSinceLastActivity >= 10 * 60 * 1000) {
+          if (lastActivity && sessionActive === 'true') {
+            const timeSinceLastActivity = Date.now() - parseInt(lastActivity, 10);
+            
+            // Si pasaron más de 10 minutos, cerrar sesión
+            if (timeSinceLastActivity >= 10 * 60 * 1000) {
+              await supabase.auth.signOut();
+              localStorage.removeItem('admin_session_active');
+              localStorage.removeItem('admin_last_activity');
+              if (mounted) {
+                setSession(null);
+                setUser(null);
+                setIsAdmin(false);
+                setIsLoading(false);
+              }
+              return;
+            }
+          } else if (!lastActivity || sessionActive !== 'true') {
+            // Si no hay registro de actividad, cerrar sesión por seguridad
             await supabase.auth.signOut();
             localStorage.removeItem('admin_session_active');
             localStorage.removeItem('admin_last_activity');
-            setSession(null);
-            setUser(null);
-            setIsAdmin(false);
-            setIsLoading(false);
+            if (mounted) {
+              setSession(null);
+              setUser(null);
+              setIsAdmin(false);
+              setIsLoading(false);
+            }
             return;
           }
-        } else if (!lastActivity || sessionActive !== 'true') {
-          // Si no hay registro de actividad, cerrar sesión por seguridad
-          await supabase.auth.signOut();
-          localStorage.removeItem('admin_session_active');
-          localStorage.removeItem('admin_last_activity');
-          setSession(null);
-          setUser(null);
-          setIsAdmin(false);
+        }
+
+        if (mounted) {
+          setSession(session);
+          setUser(session?.user ?? null);
+          await updateAdminStatus(session?.user?.id);
+        }
+      } catch (error) {
+        console.error('Error initializing auth:', error);
+        if (mounted) {
           setIsLoading(false);
-          return;
         }
       }
-      
-      setSession(session);
-      setUser(session?.user ?? null);
-      
-      if (session?.user) {
-        checkAdminRole(session.user.id).then((adminStatus) => {
-          setIsAdmin(adminStatus);
-          setIsLoading(false);
-        });
-      } else {
-        setIsLoading(false);
-      }
-    });
+    };
 
-    return () => subscription.unsubscribe();
+    // Configurar listener de cambios de autenticación
+    const { data: { subscription: authSubscription } } = supabase.auth.onAuthStateChange(
+      async (event, session) => {
+        if (!mounted) return;
+        
+        setSession(session);
+        setUser(session?.user ?? null);
+        await updateAdminStatus(session?.user?.id);
+      }
+    );
+
+    subscription = authSubscription;
+    initializeAuth();
+
+    return () => {
+      mounted = false;
+      if (subscription) {
+        subscription.unsubscribe();
+      }
+    };
   }, []);
 
   const signIn = async (email: string, password: string) => {
