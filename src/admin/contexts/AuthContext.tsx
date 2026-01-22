@@ -144,15 +144,19 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     let timeoutId: NodeJS.Timeout | null = null;
     let loadingResolved = false;
 
-    // Timeout de seguridad: si después de 30 segundos no se ha resuelto, forzar loading a false
-    // Aumentado para producción donde las consultas pueden ser más lentas
+    // Timeout de seguridad: si después de 10 segundos no se ha resuelto, forzar loading a false
+    // Esto permite que el usuario vea el login page si hay problemas de conexión
     timeoutId = setTimeout(() => {
       if (mounted && !loadingResolved) {
         console.warn('Auth initialization timeout - forcing loading to false');
         setIsLoading(false);
         loadingResolved = true;
+        // Si no hay usuario después del timeout, asegurar que isAdmin sea false
+        if (!user) {
+          setIsAdmin(false);
+        }
       }
-    }, 30000);
+    }, 10000);
 
     // Función para actualizar el estado de admin
     const updateAdminStatus = async (userId: string | undefined) => {

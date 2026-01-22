@@ -31,8 +31,10 @@ export default function Auth() {
   const [isSendingToken, setIsSendingToken] = useState(false);
 
   useEffect(() => {
+    // Solo redirigir si el usuario es admin y ya terminó de cargar
+    // No redirigir si está cargando para evitar loops
     if (user && isAdmin && !isLoading) {
-      navigate("/admin", { replace: true });
+      navigate("/", { replace: true });
     }
   }, [user, isAdmin, isLoading, navigate]);
 
