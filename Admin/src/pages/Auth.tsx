@@ -18,9 +18,10 @@ export default function Auth() {
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   useEffect(() => {
-    // Si hay usuario, redirigir inmediatamente (sin esperar isAdmin)
+    // Si hay usuario, redirigir inmediatamente al dashboard del admin (sin esperar isAdmin)
     if (user && !isLoading) {
-      navigate("/", { replace: true });
+      // Usar ruta relativa para navegar al dashboard del admin (un nivel arriba desde /admin/auth)
+      navigate("../", { replace: true });
     }
   }, [user, isLoading, navigate]);
 
