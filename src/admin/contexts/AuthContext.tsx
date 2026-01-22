@@ -1,4 +1,4 @@
-import { createContext, useContext, useEffect, useState, ReactNode, useCallback } from "react";
+import { createContext, useContext, useEffect, useState, ReactNode, useCallback, useRef } from "react";
 import { User, Session } from "@supabase/supabase-js";
 import { supabase } from "../integrations/supabase/client";
 import { useSessionTimeout } from "../hooks/useSessionTimeout";
@@ -19,31 +19,62 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [session, setSession] = useState<Session | null>(null);
   const [isAdmin, setIsAdmin] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
+  const checkAdminRoleRef = useRef<Map<string, Promise<boolean>>>(new Map());
 
-  const checkAdminRole = async (userId: string) => {
-    try {
-      console.log('Checking admin role for user:', userId);
-      // Query user_roles table directly to check for admin role
-      const { data, error } = await supabase
-        .from('user_roles')
-        .select('role')
-        .eq('user_id', userId)
-        .eq('role', 'admin')
-        .maybeSingle();
-      
-      if (error) {
-        console.error('Error checking admin role:', error);
+  const checkAdminRole = useCallback(async (userId: string) => {
+    // Evitar múltiples llamadas simultáneas para el mismo usuario
+    if (checkAdminRoleRef.current.has(userId)) {
+      console.log('Admin role check already in progress for user:', userId);
+      return await checkAdminRoleRef.current.get(userId)!;
+    }
+
+    const checkPromise = (async () => {
+      try {
+        console.log('Checking admin role for user:', userId);
+        
+        // Query user_roles table directly to check for admin role
+        const { data, error } = await supabase
+          .from('user_roles')
+          .select('role')
+          .eq('user_id', userId)
+          .eq('role', 'admin')
+          .maybeSingle();
+        
+        // Limpiar la referencia después de completar
+        checkAdminRoleRef.current.delete(userId);
+        
+        if (error) {
+          // Si el error es un AbortError, ignorarlo silenciosamente
+          if (error.message?.includes('abort') || error.message?.includes('AbortError') || 
+              error.code === 'PGRST301' || error.code === 'PGRST116') {
+            console.warn('Admin role check was aborted or cancelled:', error.message || error);
+            return false;
+          }
+          console.error('Error checking admin role:', error);
+          return false;
+        }
+        
+        const isAdmin = data !== null;
+        console.log('Admin role check result:', isAdmin, data);
+        return isAdmin;
+      } catch (err: any) {
+        // Limpiar la referencia en caso de error
+        checkAdminRoleRef.current.delete(userId);
+        
+        // Ignorar errores de aborto
+        if (err?.name === 'AbortError' || err?.message?.includes('abort')) {
+          console.warn('Admin role check was aborted:', err.message);
+          return false;
+        }
+        console.error('Error in checkAdminRole:', err);
         return false;
       }
-      
-      const isAdmin = data !== null;
-      console.log('Admin role check result:', isAdmin, data);
-      return isAdmin;
-    } catch (err) {
-      console.error('Error in checkAdminRole:', err);
-      return false;
-    }
-  };
+    })();
+
+    // Guardar la promesa en el mapa
+    checkAdminRoleRef.current.set(userId, checkPromise);
+    return await checkPromise;
+  }, []);
 
   useEffect(() => {
     let mounted = true;
@@ -219,8 +250,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       if (timeoutId) {
         clearTimeout(timeoutId);
       }
+      // Limpiar todas las referencias de checkAdminRole
+      checkAdminRoleRef.current.clear();
     };
-  }, []);
+  }, [checkAdminRole]);
 
   const signIn = async (email: string, password: string) => {
     try {
@@ -245,11 +278,19 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       // El onAuthStateChange se disparará automáticamente y actualizará el estado
       // Pero también podemos actualizar manualmente aquí para asegurar sincronización
       if (data.user?.id) {
-        const adminStatus = await checkAdminRole(data.user.id);
-        console.log('Admin status after login:', adminStatus);
-        setIsAdmin(adminStatus);
-        setUser(data.user);
-        setSession(data.session);
+        try {
+          const adminStatus = await checkAdminRole(data.user.id);
+          console.log('Admin status after login:', adminStatus);
+          setIsAdmin(adminStatus);
+          setUser(data.user);
+          setSession(data.session);
+        } catch (err: any) {
+          // Si hay un error al verificar el rol, no fallar el login
+          console.warn('Error checking admin role after login (non-fatal):', err);
+          setUser(data.user);
+          setSession(data.session);
+          // El onAuthStateChange también intentará verificar el rol
+        }
       }
       
       return { error: null };
