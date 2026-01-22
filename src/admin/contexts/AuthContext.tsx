@@ -38,16 +38,25 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       try {
         console.log(`Checking admin role for user: ${userId} (attempt ${retryCount + 1})`);
         
+        // Verificar que el userId es válido
+        if (!userId || userId.length === 0) {
+          console.error('Invalid userId provided to checkAdminRole:', userId);
+          return false;
+        }
+        
         // Query user_roles table directly to check for admin role
         // Usar una consulta más simple y directa para evitar cancelaciones
+        console.log('Executing Supabase query for admin role check...');
         const query = supabase
           .from('user_roles')
-          .select('role')
+          .select('role, user_id, created_at')
           .eq('user_id', userId)
           .eq('role', 'admin')
           .maybeSingle();
         
         const { data, error } = await query;
+        
+        console.log('Query completed. Data:', data, 'Error:', error);
         
         // Limpiar la referencia después de completar (solo en el primer intento)
         if (retryCount === 0) {
@@ -55,6 +64,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         }
         
         if (error) {
+          console.error('Error in admin role check query:', {
+            message: error.message,
+            code: error.code,
+            details: error.details,
+            hint: error.hint,
+            userId: userId
+          });
+          
           // Si el error es un AbortError, reintentar hasta MAX_RETRIES veces
           if (error.message?.includes('abort') || error.message?.includes('AbortError') || 
               error.code === 'PGRST301' || error.code === 'PGRST116') {
@@ -93,7 +110,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         }
         
         const isAdmin = data !== null;
-        console.log('Admin role check result:', isAdmin, data);
+        console.log('Admin role check result:', {
+          isAdmin: isAdmin,
+          data: data,
+          userId: userId,
+          hasData: !!data,
+          dataContent: data ? JSON.stringify(data) : 'null'
+        });
         return isAdmin;
       } catch (err: any) {
         // Limpiar la referencia en caso de error (solo en el primer intento)
@@ -143,32 +166,50 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     let subscription: { unsubscribe: () => void } | null = null;
     let timeoutId: NodeJS.Timeout | null = null;
     let loadingResolved = false;
+    let adminCheckInProgress = false;
 
-    // Timeout de seguridad: si después de 30 segundos no se ha resuelto, forzar loading a false
-    // Aumentado para producción donde las consultas pueden ser más lentas
+    // Timeout de seguridad: si después de 60 segundos no se ha resuelto, forzar loading a false
+    // Aumentado para dar tiempo a que la verificación de admin se complete
     timeoutId = setTimeout(() => {
       if (mounted && !loadingResolved) {
+        // Si hay una verificación de admin en progreso, dar más tiempo
+        if (adminCheckInProgress) {
+          console.warn('Auth initialization timeout but admin check in progress, extending timeout...');
+          // No forzar aún, esperar un poco más
+          return;
+        }
         console.warn('Auth initialization timeout - forcing loading to false');
         setIsLoading(false);
         loadingResolved = true;
       }
-    }, 30000);
+    }, 60000);
 
     // Función para actualizar el estado de admin
     const updateAdminStatus = async (userId: string | undefined) => {
       if (!mounted || loadingResolved) return;
       
       console.log('updateAdminStatus called with userId:', userId);
+      console.log('Current state - mounted:', mounted, 'loadingResolved:', loadingResolved);
       
       try {
         if (userId) {
+          adminCheckInProgress = true;
+          console.log('Starting admin role check for userId:', userId);
+          
           const adminStatus = await checkAdminRole(userId);
-          console.log('Admin status result:', adminStatus);
+          
+          adminCheckInProgress = false;
+          console.log('Admin status result from checkAdminRole:', adminStatus);
+          console.log('About to update state - mounted:', mounted, 'loadingResolved:', loadingResolved);
+          
           if (mounted && !loadingResolved) {
+            console.log('Setting isAdmin to:', adminStatus, 'and isLoading to false');
             setIsAdmin(adminStatus);
             setIsLoading(false);
             loadingResolved = true;
             if (timeoutId) clearTimeout(timeoutId);
+          } else {
+            console.warn('State update skipped - mounted:', mounted, 'loadingResolved:', loadingResolved);
           }
         } else {
           console.log('No userId provided, setting isAdmin to false');
@@ -180,7 +221,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           }
         }
       } catch (error) {
-        console.error('Error checking admin role:', error);
+        adminCheckInProgress = false;
+        console.error('Error checking admin role in updateAdminStatus:', error);
+        console.error('Error details:', {
+          message: error instanceof Error ? error.message : 'Unknown error',
+          stack: error instanceof Error ? error.stack : undefined
+        });
         if (mounted && !loadingResolved) {
           setIsAdmin(false);
           setIsLoading(false);
