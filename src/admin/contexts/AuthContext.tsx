@@ -45,29 +45,46 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     let mounted = true;
     let subscription: { unsubscribe: () => void } | null = null;
+    let timeoutId: NodeJS.Timeout | null = null;
+    let loadingResolved = false;
+
+    // Timeout de seguridad: si después de 10 segundos no se ha resuelto, forzar loading a false
+    timeoutId = setTimeout(() => {
+      if (mounted && !loadingResolved) {
+        console.warn('Auth initialization timeout - forcing loading to false');
+        setIsLoading(false);
+        loadingResolved = true;
+      }
+    }, 10000);
 
     // Función para actualizar el estado de admin
     const updateAdminStatus = async (userId: string | undefined) => {
-      if (!mounted) return;
+      if (!mounted || loadingResolved) return;
       
-      if (userId) {
-        try {
+      try {
+        if (userId) {
           const adminStatus = await checkAdminRole(userId);
-          if (mounted) {
+          if (mounted && !loadingResolved) {
             setIsAdmin(adminStatus);
             setIsLoading(false);
+            loadingResolved = true;
+            if (timeoutId) clearTimeout(timeoutId);
           }
-        } catch (error) {
-          console.error('Error checking admin role:', error);
-          if (mounted) {
+        } else {
+          if (mounted && !loadingResolved) {
             setIsAdmin(false);
             setIsLoading(false);
+            loadingResolved = true;
+            if (timeoutId) clearTimeout(timeoutId);
           }
         }
-      } else {
-        if (mounted) {
+      } catch (error) {
+        console.error('Error checking admin role:', error);
+        if (mounted && !loadingResolved) {
           setIsAdmin(false);
           setIsLoading(false);
+          loadingResolved = true;
+          if (timeoutId) clearTimeout(timeoutId);
         }
       }
     };
@@ -79,15 +96,19 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         
         if (error) {
           console.error('Error getting session:', error);
-          if (mounted) {
+          if (mounted && !loadingResolved) {
+            setSession(null);
+            setUser(null);
+            setIsAdmin(false);
             setIsLoading(false);
+            loadingResolved = true;
+            if (timeoutId) clearTimeout(timeoutId);
           }
           return;
         }
 
-        // Verificar si estamos en una ruta de admin (sin el prefijo /admin en las rutas)
-        const isAdminRoute = window.location.pathname !== '/auth' && 
-                            window.location.pathname !== '/';
+        // Verificar si estamos en una ruta de admin (cualquier ruta excepto /auth)
+        const isAdminRoute = !window.location.pathname.startsWith('/auth');
         
         if (isAdminRoute && session) {
           const lastActivity = localStorage.getItem('admin_last_activity');
@@ -101,11 +122,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
               await supabase.auth.signOut();
               localStorage.removeItem('admin_session_active');
               localStorage.removeItem('admin_last_activity');
-              if (mounted) {
+              if (mounted && !loadingResolved) {
                 setSession(null);
                 setUser(null);
                 setIsAdmin(false);
                 setIsLoading(false);
+                loadingResolved = true;
+                if (timeoutId) clearTimeout(timeoutId);
               }
               return;
             }
@@ -114,11 +137,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             await supabase.auth.signOut();
             localStorage.removeItem('admin_session_active');
             localStorage.removeItem('admin_last_activity');
-            if (mounted) {
+            if (mounted && !loadingResolved) {
               setSession(null);
               setUser(null);
               setIsAdmin(false);
               setIsLoading(false);
+              loadingResolved = true;
+              if (timeoutId) clearTimeout(timeoutId);
             }
             return;
           }
@@ -131,8 +156,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         }
       } catch (error) {
         console.error('Error initializing auth:', error);
-        if (mounted) {
+        if (mounted && !loadingResolved) {
+          setSession(null);
+          setUser(null);
+          setIsAdmin(false);
           setIsLoading(false);
+          loadingResolved = true;
+          if (timeoutId) clearTimeout(timeoutId);
         }
       }
     };
@@ -155,6 +185,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       mounted = false;
       if (subscription) {
         subscription.unsubscribe();
+      }
+      if (timeoutId) {
+        clearTimeout(timeoutId);
       }
     };
   }, []);
