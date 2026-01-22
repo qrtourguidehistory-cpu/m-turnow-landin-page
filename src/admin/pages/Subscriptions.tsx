@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { AdminLayout } from "../components/layout/AdminLayout";
 import { useSubscriptions, useUpdateSubscription, BusinessSubscription } from "../hooks/useSubscriptions";
+import { useUpdateBusiness } from "../hooks/useBusinesses";
 import { Button } from "../components/ui/button";
 import { Input } from "../components/ui/input";
 import {
@@ -62,6 +63,7 @@ const Subscriptions = () => {
   });
 
   const updateSubscription = useUpdateSubscription();
+  const updateBusiness = useUpdateBusiness();
 
   const activeCount = subscriptions?.filter(s => s.status === "active").length || 0;
   const pastDueCount = subscriptions?.filter(s => s.status === "past_due").length || 0;
@@ -156,24 +158,28 @@ const Subscriptions = () => {
     }
 
     try {
+      // Actualizar la suscripción usando el hook
       await updateSubscription.mutateAsync({
         id: subscription.id,
-        updates: { status: "cancelled" },
+        updates: { 
+          status: "cancelled",
+          updated_at: new Date().toISOString()
+        },
       });
       
-      // También actualizar el negocio para que no sea público
-      const { error: businessError } = await supabase
-        .from("businesses")
-        .update({ is_public: false, is_active: false })
-        .eq("id", subscription.business_id);
+      // También actualizar el negocio usando el hook para asegurar permisos correctos
+      await updateBusiness.mutateAsync({
+        id: subscription.business_id,
+        updates: { 
+          is_public: false, 
+          is_active: false,
+        },
+      });
 
-      if (businessError) {
-        console.error("Error updating business:", businessError);
-      }
-
-      toast.success("Suscripción cancelada");
+      toast.success("Suscripción cancelada y establecimiento desactivado");
     } catch (err: any) {
-      toast.error("Error al cancelar la suscripción");
+      console.error("Error canceling subscription:", err);
+      toast.error(err?.message || "Error al cancelar la suscripción");
     }
   };
 

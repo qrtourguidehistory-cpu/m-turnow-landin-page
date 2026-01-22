@@ -150,6 +150,74 @@ const Establishments = () => {
     }
   };
 
+  const handleBanClick = (biz: Business) => {
+    setBusinessForBan(biz);
+    setBanDialogOpen(true);
+  };
+
+  const handleBanConfirm = async (reason: string) => {
+    if (!businessForBan) return;
+
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) {
+      toast.error("Debes iniciar sesión para realizar esta acción");
+      return;
+    }
+
+    try {
+      const isBanned = (businessForBan as any).is_banned;
+
+      if (isBanned) {
+        // Desbanear
+        await updateBusiness.mutateAsync({
+          id: businessForBan.id,
+          updates: {
+            is_banned: false,
+            banned_at: null,
+            banned_reason: null,
+            banned_by: null,
+          },
+        });
+        toast.success(`${businessForBan.business_name || "Establecimiento"} ha sido desbaneado`);
+      } else {
+        // Banear
+        await updateBusiness.mutateAsync({
+          id: businessForBan.id,
+          updates: {
+            is_banned: true,
+            banned_at: new Date().toISOString(),
+            banned_reason: reason,
+            banned_by: user.id,
+            is_active: false,
+            is_public: false,
+          },
+        });
+
+        // Suspender la suscripción si existe
+        const { data: subscription } = await supabase
+          .from("business_subscriptions")
+          .select("id")
+          .eq("business_id", businessForBan.id)
+          .single();
+
+        if (subscription) {
+          await supabase
+            .from("business_subscriptions")
+            .update({ status: "suspended" })
+            .eq("id", subscription.id);
+        }
+
+        toast.success(`${businessForBan.business_name || "Establecimiento"} ha sido baneado permanentemente`);
+      }
+
+      setBanDialogOpen(false);
+      setBusinessForBan(null);
+      refetch();
+    } catch (error: any) {
+      toast.error(`Error: ${error?.message || "No se pudo realizar la acción."}`);
+    }
+  };
+
   const handleManageSubscription = (biz: Business) => {
     setBusinessForSubscription(biz);
     setSubscriptionDialogOpen(true);

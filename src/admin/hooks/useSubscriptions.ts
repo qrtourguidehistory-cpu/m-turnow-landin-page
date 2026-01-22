@@ -184,11 +184,16 @@ export function useUpdateSubscription() {
       if (error) throw error;
       return data;
     },
-    onSuccess: () => {
+    onSuccess: (data, variables) => {
       queryClient.invalidateQueries({ queryKey: ["subscriptions"] });
       queryClient.invalidateQueries({ queryKey: ["subscription"] });
       queryClient.invalidateQueries({ queryKey: ["businesses"] });
       queryClient.invalidateQueries({ queryKey: ["dashboard-stats"] });
+      
+      // Si se canceló o suspendió, también invalidar para refrescar el estado
+      if (variables.updates.status === "cancelled" || variables.updates.status === "suspended") {
+        queryClient.invalidateQueries({ queryKey: ["subscription", data?.business_id] });
+      }
     },
   });
 }
