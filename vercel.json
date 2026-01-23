@@ -5,6 +5,28 @@
     { "source": "/terminos", "destination": "/index.html" },
     { "source": "/privacidad", "destination": "/index.html" },
     { "source": "/cookies", "destination": "/index.html" },
+    { "source": "/paypal/success", "destination": "/index.html" },
+    { "source": "/paypal/cancel", "destination": "/index.html" },
     { "source": "/admin/:path*", "destination": "/index.html" }
+  ],
+  "headers": [
+    {
+      "source": "/.well-known/assetlinks.json",
+      "headers": [
+        {
+          "key": "Content-Type",
+          "value": "application/json"
+        }
+      ]
+    },
+    {
+      "source": "/.well-known/apple-app-site-association",
+      "headers": [
+        {
+          "key": "Content-Type",
+          "value": "application/json"
+        }
+      ]
+    }
   ]
 }

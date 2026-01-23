@@ -1,0 +1,13 @@
+[
+  {
+    "relation": ["delegate_permission/common.handle_all_urls"],
+    "target": {
+      "namespace": "android_app",
+      "package_name": "com.miturnow.partner",
+      "sha256_cert_fingerprints": [
+        "9D08177F106043D44B3F2B564FA7202837A4C360F0CE997B28BE42ED7AC14C56"
+      ]
+    }
+  }
+]
+
