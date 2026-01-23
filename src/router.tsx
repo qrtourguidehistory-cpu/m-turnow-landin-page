@@ -5,8 +5,8 @@ import Contact from "./pages/Contact";
 import Terms from "./pages/Terms";
 import Privacy from "./pages/Privacy";
 import Cookies from "./pages/Cookies";
-import PayPalSuccess from "./pages/PayPalSuccess";
-import PayPalCancel from "./pages/PayPalCancel";
+import PayPalSuccess from "./pages/paypal/success";
+import PayPalCancel from "./pages/paypal/cancel";
 import NotFound from "./pages/NotFound";
 
 const Router = () => (
@@ -18,7 +18,7 @@ const Router = () => (
     <Route path="/privacidad" element={<Privacy />} />
     <Route path="/cookies" element={<Cookies />} />
     
-    {/* PayPal Routes */}
+    {/* PayPal Routes - Filesystem-based */}
     <Route path="/paypal/success" element={<PayPalSuccess />} />
     <Route path="/paypal/cancel" element={<PayPalCancel />} />
     
