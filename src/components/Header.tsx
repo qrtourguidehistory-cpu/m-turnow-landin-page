@@ -1,9 +1,10 @@
 import { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Menu, X, Apple, Play } from 'lucide-react';
+import { Menu, X } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import logo from '@/assets/logo.png';
 import { useIsMobile } from '@/hooks/use-mobile';
+import DownloadDropdown from './DownloadDropdown';
 
 const Header = () => {
   const [isScrolled, setIsScrolled] = useState(false);
@@ -63,19 +64,6 @@ const Header = () => {
     }
   };
 
-  // Función para botones de descarga
-  const handleDownloadClick = (e: React.MouseEvent<HTMLAnchorElement>, store: 'appstore' | 'playstore') => {
-    e.preventDefault();
-    setIsMobileMenuOpen(false);
-    
-    const downloadSection = document.querySelector('#download');
-    if (downloadSection) {
-      downloadSection.scrollIntoView({ behavior: 'smooth', block: 'start' });
-    } else {
-      // Si no existe la sección, puedes abrir los links reales aquí
-      // window.open(store === 'appstore' ? 'https://apps.apple.com/...' : 'https://play.google.com/...', '_blank');
-    }
-  };
   const navItems = [{
     label: 'Inicio',
     href: '#hero'
@@ -145,22 +133,8 @@ const Header = () => {
 
             {/* Download Buttons */}
             <div className="hidden lg:flex items-center gap-3">
-              <a 
-                href="#download" 
-                onClick={(e) => handleDownloadClick(e, 'appstore')}
-                className={`flex items-center gap-2 px-4 py-2 rounded-lg font-semibold text-sm transition-all hover:scale-105 bg-white text-primary hover:bg-white/90 cursor-pointer`}
-              >
-                <Apple className="w-4 h-4" />
-                App Store
-              </a>
-              <a 
-                href="#download" 
-                onClick={(e) => handleDownloadClick(e, 'playstore')}
-                className={`flex items-center gap-2 px-4 py-2 border rounded-lg font-semibold text-sm transition-all hover:scale-105 bg-white/10 text-white border-white/20 hover:bg-white/20 cursor-pointer`}
-              >
-                <Play className="w-4 h-4" />
-                Play Store
-              </a>
+              <DownloadDropdown store="appstore" variant="header" />
+              <DownloadDropdown store="playstore" variant="header" />
             </div>
 
             {/* Mobile Menu Button */}
@@ -234,22 +208,8 @@ const Header = () => {
                 );
               })}
               <div className="flex flex-col gap-3 pt-6 border-t border-white/20">
-                <a 
-                  href="#download" 
-                  onClick={(e) => handleDownloadClick(e, 'appstore')}
-                  className="flex items-center justify-center gap-2 px-6 py-3 bg-white text-primary rounded-xl font-semibold cursor-pointer"
-                >
-                  <Apple className="w-5 h-5" />
-                  App Store
-                </a>
-                <a 
-                  href="#download" 
-                  onClick={(e) => handleDownloadClick(e, 'playstore')}
-                  className="flex items-center justify-center gap-2 px-6 py-3 bg-white/10 text-white border border-white/20 rounded-xl font-semibold cursor-pointer"
-                >
-                  <Play className="w-5 h-5" />
-                  Play Store
-                </a>
+                <DownloadDropdown store="appstore" variant="header-mobile" />
+                <DownloadDropdown store="playstore" variant="header-mobile" />
               </div>
             </div>
           </motion.div>}

@@ -1,5 +1,6 @@
 import { motion } from 'framer-motion';
-import { Apple, Play, ArrowRight } from 'lucide-react';
+import { Apple, Play } from 'lucide-react';
+import DownloadDropdown from './DownloadDropdown';
 
 const CTA = () => {
   return (
@@ -35,29 +36,8 @@ const CTA = () => {
             transition={{ duration: 0.6, delay: 0.2 }}
             className="flex flex-col sm:flex-row gap-4 justify-center"
           >
-            <a 
-              href="#download" 
-              className="store-badge group"
-            >
-              <Apple className="w-8 h-8" />
-              <div className="text-left">
-                <div className="text-xs opacity-70">Descargar en</div>
-                <div className="font-bold -mt-1">App Store</div>
-              </div>
-              <ArrowRight className="w-5 h-5 ml-2 group-hover:translate-x-1 transition-transform" />
-            </a>
-            
-            <a 
-              href="#download" 
-              className="btn-outline-dark group"
-            >
-              <Play className="w-8 h-8" />
-              <div className="text-left">
-                <div className="text-xs opacity-70">Disponible en</div>
-                <div className="font-bold -mt-1">Google Play</div>
-              </div>
-              <ArrowRight className="w-5 h-5 ml-2 group-hover:translate-x-1 transition-transform" />
-            </a>
+            <DownloadDropdown store="appstore" variant="default" />
+            <DownloadDropdown store="playstore" variant="default" />
           </motion.div>
 
           {/* Trust badges */}

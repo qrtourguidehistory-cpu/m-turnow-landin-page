@@ -1,8 +1,8 @@
 import { motion } from 'framer-motion';
-import { Apple, Play, ArrowRight } from 'lucide-react';
 import PhoneMockup from './PhoneMockup';
 import screenUserOnboarding from '@/assets/screen-user-onboarding.png';
 import { useIsMobile } from '@/hooks/use-mobile';
+import DownloadDropdown from './DownloadDropdown';
 
 const Hero = () => {
   const isMobile = useIsMobile();
@@ -90,14 +90,8 @@ const Hero = () => {
               transition={{ duration: 0.6, delay: 0.6 }}
               className="flex flex-row gap-3 w-full max-w-md justify-center"
             >
-              <a href="#download" className="flex items-center justify-center gap-2 px-4 py-2.5 bg-black text-white rounded-lg font-medium text-sm hover:bg-gray-800 transition-colors flex-1">
-                <Apple className="w-5 h-5" />
-                <span>App Store</span>
-              </a>
-              <a href="#download" className="flex items-center justify-center gap-2 px-4 py-2.5 border-2 border-black text-black rounded-lg font-medium text-sm hover:bg-gray-50 transition-colors flex-1">
-                <Play className="w-5 h-5" />
-                <span>Google Play</span>
-              </a>
+              <DownloadDropdown store="appstore" variant="mobile" className="flex-1" />
+              <DownloadDropdown store="playstore" variant="mobile" className="flex-1" />
             </motion.div>
           </div>
         ) : (
@@ -154,22 +148,8 @@ const Hero = () => {
                 transition={{ duration: 0.6, delay: 0.3 }}
                 className="flex flex-col sm:flex-row gap-4"
               >
-                <a href="#download" className="store-badge group">
-                  <Apple className="w-8 h-8" />
-                  <div>
-                    <div className="text-xs opacity-70">Descargar en</div>
-                    <div className="font-semibold text-lg -mt-1">App Store</div>
-                  </div>
-                  <ArrowRight className="w-5 h-5 ml-2 group-hover:translate-x-1 transition-transform" />
-                </a>
-                <a href="#download" className="btn-outline-dark group">
-                  <Play className="w-8 h-8" />
-                  <div>
-                    <div className="text-xs opacity-70">Disponible en</div>
-                    <div className="font-semibold text-lg -mt-1">Google Play</div>
-                  </div>
-                  <ArrowRight className="w-5 h-5 ml-2 group-hover:translate-x-1 transition-transform" />
-                </a>
+                <DownloadDropdown store="appstore" variant="default" />
+                <DownloadDropdown store="playstore" variant="default" />
               </motion.div>
 
               {/* Stats */}
